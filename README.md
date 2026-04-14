@@ -6,15 +6,34 @@ permalink: /index.html
 # Tekt Bootstrap — Installation Guide
 
 Set up a complete Tekt development environment in a single script. Covers every tool in the Tekt stack — from the platform runtime layer up through native AI agents.
-IF you would like to download a OEM Linuxmint distribution by Rahul, you can download it here. It will bootup in VirtualBox or any compliant VM system, and ask you to set it up as if it was a brand new computer, except that it has most of the prerequisites installed (except hermes, picoclaw). [Download TEKT VM here.](https://drive.google.com/file/d/1LG1PuvDKxfj-RyGCJ_iRCbnOPWe17fOL/view?usp=sharing)
 
 ---
 
-## Quick Start
+## Quick Start (Curl)
 
 ```bash
-git clone https://github.com/xingh/tektmd
-cd tektmd
+curl -fsSL https://tekt.md/install.sh | bash
+```
+
+## Quick Start (Git)
+
+```bash
+git clone https://github.com/xingh/tekt.md
+cd tekt.md
+bash install.sh
+```
+
+## Quick Start (VirtualBox)
+
+If you would like to download an OEM Linux Mint distribution by Rahul Singh, you can download it here. It will boot up in VirtualBox or any compliant VM system and ask you to set it up as if it was a brand new computer, except that it has most of the prerequisites installed (except Hermes Agent and PicoClaw).
+
+- Install Oracle [VirtualBox](https://virtualbox.org)
+- [Download TEKT VM here.](https://drive.google.com/file/d/1LG1PuvDKxfj-RyGCJ_iRCbnOPWe17fOL/view?usp=sharing)
+- After initial setup:
+
+```bash
+cd ~/Tools/tekt.md
+git pull
 bash install.sh
 ```
 
@@ -758,7 +777,14 @@ The installer requires `curl`, `git`, and Python build tools. On Ubuntu/Debian:
 ```bash
 sudo apt install -y curl git build-essential
 ```
-Then re-run the install script. If `hermes` is not found after install, ensure `~/.local/bin` is in your `$PATH`.
+Then re-run the install script. If `hermes` is not found after install, add `~/.local/bin` to your `$PATH`:
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc   # or ~/.zshrc
+source ~/.bashrc
+```
+
+**PicoClaw / Hermes / OpenClaw still not found after install**
+The install script adds `~/.local/bin` and the npm global bin directory to your shell profile automatically. If they still aren't found, restart your terminal entirely (not just `source` — some shells cache PATH).
 
 ---
 
@@ -780,9 +806,9 @@ See the [Tekt Workspace Architecture](#architecture-reference) section above for
 
 ## Contributing
 
-Issues and PRs welcome at [github.com/xingh/tektmd](https://github.com/xingh/tektmd).
+Issues and PRs welcome at [github.com/xingh/tekt.md](https://github.com/xingh/tekt.md).
 
 ---
 
 *Maintained by [Anant Corporation](https://anant.us)*
-
+---
