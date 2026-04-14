@@ -7,14 +7,8 @@ Set up a complete Tekt development environment in a single script. Covers every 
 ## Quick Start
 
 ```bash
-curl -fsSL https://tekt.md/install.sh | bash
-```
-
-Or clone and run locally:
-
-```bash
-git clone https://github.com/anantcorp/tekt
-cd tekt
+git clone https://github.com/xingh/tektmd
+cd tektmd
 bash tekt-bootstrap.sh
 ```
 
@@ -142,7 +136,7 @@ npm --version
 
 ### 5. rclone
 
-rclone is the sync backbone for Tekt workspaces — it mirrors the global workspace from S3 to local instances and back. See the [Tekt Workspace Architecture](https://tekt.md/architecture/workspace) for how `Tekt/Global/Workspaces` and `Tekt/Instances/` are structured.
+rclone is the sync backbone for Tekt workspaces — it mirrors the global workspace from S3 to local instances and back. The workspace structure uses `Tekt/Global/Workspaces` for the S3-synced global layer and `Tekt/Instances/` for local git-backed per-installation workspaces.
 
 **Manual install:**
 ```bash
@@ -278,12 +272,7 @@ claude --print "explain this"  # Non-interactive mode
 
 OpenClaw is Tekt's primary agentic workspace runtime — a full-featured agent environment built on top of the Claw architecture. It orchestrates tool calls, manages MCP server connections, and runs multi-step agent workflows.
 
-**Install:**
-```bash
-curl -fsSL https://github.com/anantcorp/openclaw/releases/latest/download/install.sh | bash
-```
-
-**Or via npm (once published):**
+**Install (once published):**
 ```bash
 npm install -g @anantcorp/openclaw
 ```
@@ -294,7 +283,7 @@ openclaw init --workspace ~/Tekt/Instances/myworkspace
 openclaw start
 ```
 
-**Docs:** [tekt.md/openclaw](https://tekt.md/openclaw)
+> **Note:** OpenClaw is under active development. The install script and public repo will be linked here on release.
 
 ---
 
@@ -302,9 +291,9 @@ openclaw start
 
 PicoClaw is the lightweight Claw runtime for resource-constrained or edge environments — background processing nodes, headless machines, and embedded Tekt instances. Functionally equivalent to OpenClaw but with a minimal footprint.
 
-**Install:**
+**Install (once published):**
 ```bash
-curl -fsSL https://github.com/anantcorp/picoclaw/releases/latest/download/install.sh | bash
+npm install -g @anantcorp/picoclaw
 ```
 
 **Typical use case (background node):**
@@ -312,7 +301,7 @@ curl -fsSL https://github.com/anantcorp/picoclaw/releases/latest/download/instal
 picoclaw start --mode headless --sync-remote s3://tekt-global
 ```
 
-**Docs:** [tekt.md/picoclaw](https://tekt.md/picoclaw)
+> **Note:** PicoClaw is under active development. The install script and public repo will be linked here on release.
 
 ---
 
@@ -320,14 +309,14 @@ picoclaw start --mode headless --sync-remote s3://tekt-global
 
 Hermes is Tekt's coordination and messaging agent — responsible for routing tasks, managing inter-agent communication, and handling async workflows across the Tekt instance graph.
 
-**Install:**
+**Install (once published):**
 ```bash
-curl -fsSL https://github.com/anantcorp/hermes-agent/releases/latest/download/install.sh | bash
+# Install script and repo will be available at release
 ```
 
-**Or build from source:**
+**Or build from source (internal):**
 ```bash
-git clone https://github.com/anantcorp/hermes-agent
+git clone https://github.com/xingh/hermes-agent
 cd hermes-agent
 go build -o hermes .
 sudo mv hermes /usr/local/bin/
@@ -338,7 +327,7 @@ sudo mv hermes /usr/local/bin/
 hermes start --config ~/.tekt/hermes.yaml
 ```
 
-**Docs:** [tekt.md/hermes](https://tekt.md/hermes)
+> **Note:** Hermes Agent is under active development. The public release and install script will be linked here on release.
 
 ---
 
@@ -384,7 +373,7 @@ openclaw init
 
 ## Customizing the Script
 
-The top of `install.sh` exposes version pins and repo URLs as variables. Edit these before running to lock specific versions:
+The top of `tekt-bootstrap.sh` exposes version pins and repo URLs as variables. Edit these before running to lock specific versions:
 
 ```bash
 GO_VERSION="1.22.4"
@@ -392,11 +381,64 @@ PYTHON_VERSION="3.12.4"
 NODE_VERSION="20"
 NVM_VERSION="0.40.1"
 
-OPENCLAW_REPO="https://github.com/anantcorp/openclaw"
-PICOCLAW_REPO="https://github.com/anantcorp/picoclaw"
-HERMES_REPO="https://github.com/anantcorp/hermes-agent"
+OPENCLAW_REPO="https://github.com/xingh/openclaw"   # update when repo is public
+PICOCLAW_REPO="https://github.com/xingh/picoclaw"   # update when repo is public
+HERMES_REPO="https://github.com/xingh/hermes-agent" # update when repo is public
 ```
 
 To skip a specific tool, comment out its call in the `main()` function at the bottom of the script.
 
 ---
+
+## Troubleshooting
+
+**`command not found` after install**
+The new binary is not yet in your `$PATH`. Reload your shell profile:
+```bash
+source ~/.zshrc   # or ~/.bashrc
+```
+
+**`brew: command not found` on Linux**
+Linuxbrew installs to `/home/linuxbrew/.linuxbrew`. Add to PATH:
+```bash
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+```
+
+**Python build fails on Linux**
+Install build dependencies first:
+```bash
+sudo apt install build-essential libssl-dev zlib1g-dev libbz2-dev \
+  libreadline-dev libsqlite3-dev liblzma-dev
+```
+
+**AWS CLI install fails on ARM Linux**
+Ensure you're using the `aarch64` build — the script auto-detects, but verify `uname -m` returns `aarch64`.
+
+**OpenClaw / PicoClaw / Hermes not yet available**
+These tools are under active development and not yet publicly released. Internal builds can be obtained directly from Anant Corporation.
+
+---
+
+## Architecture Reference
+
+```
+Tekt/
+├── Global/
+│   └── Workspaces/          ← synced from S3 via rclone / s5cmd
+└── Instances/
+    ├── dev-main/            ← local git-backed workspace (OpenClaw)
+    ├── edge-node-01/        ← lightweight instance (PicoClaw)
+    └── hermes/              ← coordination layer (Hermes Agent)
+```
+
+See the [Tekt Workspace Architecture](#architecture-reference) section above for a full diagram of the cloud-to-edge sync model.
+
+---
+
+## Contributing
+
+Issues and PRs welcome at [github.com/xingh/tektmd](https://github.com/xingh/tektmd).
+
+---
+
+*Maintained by [Anant Corporation](https://anant.us)*
