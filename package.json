@@ -1,0 +1,12 @@
+{
+  "name": "tekt-md-site",
+  "version": "1.0.0",
+  "description": "tekt.md static site",
+  "scripts": {
+    "build": "eleventy",
+    "start": "eleventy --serve"
+  },
+  "devDependencies": {
+    "@11ty/eleventy": "^2.0.1"
+  }
+}
