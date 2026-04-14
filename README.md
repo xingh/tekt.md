@@ -9,7 +9,7 @@ Set up a complete Tekt development environment in a single script. Covers every 
 ```bash
 git clone https://github.com/xingh/tektmd
 cd tektmd
-bash tekt-bootstrap.sh
+bash install.sh
 ```
 
 **Supported platforms:** macOS (Intel + Apple Silicon), Ubuntu/Debian, Fedora/RHEL, Arch Linux.
@@ -373,7 +373,7 @@ openclaw init
 
 ## Customizing the Script
 
-The top of `tekt-bootstrap.sh` exposes version pins and repo URLs as variables. Edit these before running to lock specific versions:
+The top of `install.sh` exposes version pins and repo URLs as variables. Edit these before running to lock specific versions:
 
 ```bash
 GO_VERSION="1.22.4"
