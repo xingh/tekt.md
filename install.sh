@@ -37,10 +37,9 @@ NODE_VERSION="24"          # Active LTS (Krypton)
 NVM_VERSION="0.40.4"
 
 # ── Repo / binary sources for Tekt-native tools ───────────────────────────────
-# TODO: Replace these with final release URLs once published
-OPENCLAW_REPO="https://github.com/anantcorp/openclaw"
-PICOCLAW_REPO="https://github.com/anantcorp/picoclaw"
-HERMES_REPO="https://github.com/anantcorp/hermes-agent"
+OPENCLAW_REPO="https://github.com/openclaw/openclaw"
+PICOCLAW_REPO="https://github.com/sipeed/picoclaw"
+HERMES_REPO="https://github.com/NousResearch/hermes-agent"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 command_exists() { command -v "$1" &>/dev/null; }
@@ -482,19 +481,31 @@ install_openclaw() {
     return
   fi
 
-  # ── Option A: npm package (uncomment when published) ────────────────────────
-  # npm install -g @anantcorp/openclaw
+  # Ensure nvm / node is loaded
+  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
 
-  # ── Option B: install script from release (active path) ─────────────────────
-  log "Installing OpenClaw from $OPENCLAW_REPO ..."
-  if curl -fsSL "${OPENCLAW_REPO}/releases/latest/download/install.sh" -o /tmp/openclaw-install.sh 2>/dev/null; then
+  # Prefer the official install script (handles platform detection)
+  log "Installing OpenClaw..."
+  if curl -fsSL https://openclaw.ai/install.sh -o /tmp/openclaw-install.sh 2>/dev/null; then
     bash /tmp/openclaw-install.sh
     rm -f /tmp/openclaw-install.sh
-    success "OpenClaw installed"
+    success "OpenClaw installed (script)"
+  elif command_exists npm; then
+    # Fallback: npm global install
+    log "Install script not reachable — falling back to npm..."
+    npm install -g openclaw@latest
+    success "OpenClaw installed (npm)"
   else
-    warn "OpenClaw install script not reachable at ${OPENCLAW_REPO}."
-    warn "Clone manually:"
-    warn "  git clone ${OPENCLAW_REPO} && cd openclaw && npm install && npm link"
+    error "Could not install OpenClaw. Install manually:"
+    error "  npm install -g openclaw@latest"
+    error "  — or —"
+    error "  curl -fsSL https://openclaw.ai/install.sh | bash"
+    return
+  fi
+
+  if command_exists openclaw; then
+    log "Run 'openclaw onboard --install-daemon' to complete setup."
   fi
 }
 
@@ -509,15 +520,50 @@ install_picoclaw() {
     return
   fi
 
-  log "Installing PicoClaw from $PICOCLAW_REPO ..."
-  if curl -fsSL "${PICOCLAW_REPO}/releases/latest/download/install.sh" -o /tmp/picoclaw-install.sh 2>/dev/null; then
-    bash /tmp/picoclaw-install.sh
-    rm -f /tmp/picoclaw-install.sh
-    success "PicoClaw installed"
+  local os arch binary_name dl_url
+  os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  arch="$(arch_type)"
+
+  # Map OS names to PicoClaw release naming convention
+  case "$os" in
+    darwin) os="darwin" ;;
+    linux)  os="Linux" ;;
+    *)
+      warn "Unsupported OS for PicoClaw binary download: $os"
+      warn "Build from source: git clone ${PICOCLAW_REPO} && cd picoclaw && make deps && make install"
+      return
+      ;;
+  esac
+
+  # PicoClaw uses darwin_arm64, darwin_amd64, Linux_arm64, Linux_amd64
+  if [ "$os" = "darwin" ]; then
+    # macOS: direct binary (no tarball)
+    binary_name="picoclaw_${os}_${arch}"
+    dl_url="${PICOCLAW_REPO}/releases/latest/download/${binary_name}"
+    log "Downloading PicoClaw for ${os}/${arch}..."
+    curl -fsSL "$dl_url" -o /tmp/picoclaw
+    chmod +x /tmp/picoclaw
+    require_sudo
+    $SUDO mv /tmp/picoclaw /usr/local/bin/picoclaw
   else
-    warn "PicoClaw install script not reachable at ${PICOCLAW_REPO}."
-    warn "Clone manually:"
-    warn "  git clone ${PICOCLAW_REPO} && cd picoclaw && npm install && npm link"
+    # Linux: tarball
+    binary_name="picoclaw_${os}_${arch}.tar.gz"
+    dl_url="${PICOCLAW_REPO}/releases/latest/download/${binary_name}"
+    log "Downloading PicoClaw for ${os}/${arch}..."
+    curl -fsSL "$dl_url" -o /tmp/picoclaw.tar.gz
+    tar xzf /tmp/picoclaw.tar.gz -C /tmp/
+    require_sudo
+    $SUDO mv /tmp/picoclaw /usr/local/bin/picoclaw
+    $SUDO chmod +x /usr/local/bin/picoclaw
+    rm -f /tmp/picoclaw.tar.gz
+  fi
+
+  if command_exists picoclaw; then
+    success "PicoClaw installed — $(picoclaw --version 2>/dev/null || echo 'version unknown')"
+    log "Run 'picoclaw onboard' to complete setup."
+  else
+    warn "PicoClaw binary not found in PATH after install."
+    warn "Build from source: git clone ${PICOCLAW_REPO} && cd picoclaw && make deps && make install"
   fi
 }
 
@@ -532,15 +578,28 @@ install_hermes() {
     return
   fi
 
-  log "Installing Hermes Agent from $HERMES_REPO ..."
-  if curl -fsSL "${HERMES_REPO}/releases/latest/download/install.sh" -o /tmp/hermes-install.sh 2>/dev/null; then
+  log "Installing Hermes Agent from NousResearch..."
+  # The official installer handles everything: Python, Node.js, venv, deps, global symlink
+  if curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh -o /tmp/hermes-install.sh 2>/dev/null; then
     bash /tmp/hermes-install.sh
     rm -f /tmp/hermes-install.sh
-    success "Hermes Agent installed"
+    if command_exists hermes; then
+      success "Hermes Agent installed"
+      log "Run 'hermes setup' to configure your LLM provider and messaging."
+    else
+      warn "Hermes installed but 'hermes' not found in PATH."
+      warn "Ensure ~/.local/bin is in your PATH, then restart your shell."
+    fi
   else
-    warn "Hermes install script not reachable at ${HERMES_REPO}."
-    warn "Clone manually:"
-    warn "  git clone ${HERMES_REPO} && cd hermes-agent && go build -o hermes . && mv hermes /usr/local/bin/"
+    warn "Hermes install script not reachable."
+    warn "Install manually:"
+    warn "  git clone --recurse-submodules ${HERMES_REPO}"
+    warn "  cd hermes-agent"
+    warn "  curl -LsSf https://astral.sh/uv/install.sh | sh"
+    warn "  uv venv venv --python 3.11"
+    warn "  export VIRTUAL_ENV=\"\$(pwd)/venv\""
+    warn "  uv pip install -e \".[all]\""
+    warn "  mkdir -p ~/.local/bin && ln -sf \"\$(pwd)/venv/bin/hermes\" ~/.local/bin/hermes"
   fi
 }
 
