@@ -12,8 +12,8 @@ Set up a complete Tekt development environment in a single script. Covers every 
 ## Quick Start
 
 ```bash
-git clone https://github.com/xingh/tektmd
-cd tektmd
+git clone https://github.com/xingh/tekt.md
+cd tekt.md
 bash install.sh
 ```
 
@@ -638,7 +638,7 @@ See the [Tekt Workspace Architecture](#architecture-reference) section above for
 
 ## Contributing
 
-Issues and PRs welcome at [github.com/xingh/tektmd](https://github.com/xingh/tektmd).
+Issues and PRs welcome at [github.com/xingh/tekt.md](https://github.com/xingh/tekt.md).
 
 ---
 
