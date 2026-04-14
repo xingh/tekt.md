@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ title or "tekt.md" }}</title>
+  <style>
+    :root {
+      --blue: #1a3a6b;
+      --blue-mid: #1e4d9e;
+      --blue-light: #2563eb;
+      --gold: #f5a623;
+      --gold-dark: #c8860f;
+      --bg: #0d1f3c;
+      --surface: #112244;
+      --text: #e8edf5;
+      --muted: #8fa8d0;
+      --code-bg: #0a1628;
+      --border: #1e3a6e;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 3px solid var(--gold);
+      padding: 1.2rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    header .logo {
+      font-size: 1.6rem;
+      font-weight: 800;
+      color: var(--gold);
+      letter-spacing: -0.5px;
+    }
+
+    header .tagline {
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, var(--blue) 0%, var(--blue-mid) 100%);
+      border-bottom: 2px solid var(--gold);
+      padding: 3rem 2rem;
+      text-align: center;
+    }
+
+    .hero h1 {
+      font-size: 2.6rem;
+      font-weight: 900;
+      color: var(--gold);
+      margin-bottom: 0.75rem;
+    }
+
+    .hero p {
+      font-size: 1.15rem;
+      color: var(--text);
+      max-width: 680px;
+      margin: 0 auto 1.5rem;
+    }
+
+    .hero .cta {
+      display: inline-block;
+      background: var(--gold);
+      color: var(--bg);
+      font-weight: 700;
+      font-size: 1rem;
+      padding: 0.7rem 1.8rem;
+      border-radius: 6px;
+      text-decoration: none;
+      transition: background 0.2s;
+    }
+
+    .hero .cta:hover { background: var(--gold-dark); }
+
+    main {
+      max-width: 860px;
+      margin: 2.5rem auto;
+      padding: 0 1.5rem 4rem;
+    }
+
+    /* Markdown content */
+    main h1, main h2, main h3, main h4 {
+      color: var(--gold);
+      margin: 2rem 0 0.6rem;
+      line-height: 1.25;
+    }
+
+    main h1 { font-size: 2rem; display: none; } /* title shown in hero */
+    main h2 { font-size: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+    main h3 { font-size: 1.2rem; }
+
+    main p { margin: 0.75rem 0; }
+
+    main a { color: var(--blue-light); text-decoration: none; }
+    main a:hover { text-decoration: underline; color: var(--gold); }
+
+    main ul, main ol { padding-left: 1.5rem; margin: 0.6rem 0; }
+    main li { margin: 0.3rem 0; }
+
+    main pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      margin: 1rem 0;
+    }
+
+    main code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 0.88em;
+      background: var(--code-bg);
+      padding: 0.15em 0.4em;
+      border-radius: 3px;
+      color: var(--gold);
+    }
+
+    main pre code {
+      background: transparent;
+      padding: 0;
+      color: #c9d8f0;
+    }
+
+    main table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.95rem;
+    }
+
+    main th {
+      background: var(--surface);
+      color: var(--gold);
+      padding: 0.6rem 1rem;
+      text-align: left;
+      border-bottom: 2px solid var(--gold);
+    }
+
+    main td {
+      padding: 0.55rem 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    main tr:hover td { background: rgba(245, 166, 35, 0.05); }
+
+    main hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 2rem 0;
+    }
+
+    main blockquote {
+      border-left: 4px solid var(--gold);
+      padding: 0.5rem 1rem;
+      color: var(--muted);
+      margin: 1rem 0;
+      background: var(--surface);
+      border-radius: 0 4px 4px 0;
+    }
+
+    footer {
+      text-align: center;
+      padding: 1.5rem;
+      color: var(--muted);
+      font-size: 0.85rem;
+      border-top: 1px solid var(--border);
+    }
+
+    @media (max-width: 600px) {
+      .hero h1 { font-size: 1.8rem; }
+      main { padding: 0 1rem 3rem; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="logo">tekt.md</span>
+    <span class="tagline">Platform Bootstrap</span>
+  </header>
+
+  <div class="hero">
+    <h1>tekt.md</h1>
+    <p>Set up a complete Tekt development environment in a single script.</p>
+    <a class="cta" href="https://github.com/xingh/tekt.md">View on GitHub</a>
+  </div>
+
+  <main>
+    {{ content | safe }}
+  </main>
+
+  <footer>
+    &copy; 2025 tekt.md — built with Eleventy
+  </footer>
+</body>
+</html>

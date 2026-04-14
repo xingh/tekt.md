@@ -1,3 +1,9 @@
+---
+layout: layout.njk
+title: tekt.md — Tekt Bootstrap
+permalink: /index.html
+---
+
 # Tekt Bootstrap — Installation Guide
 
 Set up a complete Tekt development environment in a single script. Covers every tool in the Tekt stack — from the platform runtime layer up through native AI agents.
