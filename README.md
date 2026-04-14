@@ -6,6 +6,7 @@ permalink: /index.html
 # Tekt Bootstrap — Installation Guide
 
 Set up a complete Tekt development environment in a single script. Covers every tool in the Tekt stack — from the platform runtime layer up through native AI agents.
+IF you would like to download a OEM Linuxmint distribution by Rahul, you can download it here. It will bootup in VirtualBox or any compliant VM system, and ask you to set it up as if it was a brand new computer, except that it has most of the prerequisites installed (except hermes, picoclaw). [Download TEKT VM here.](https://drive.google.com/file/d/1LG1PuvDKxfj-RyGCJ_iRCbnOPWe17fOL/view?usp=sharing)
 
 ---
 
