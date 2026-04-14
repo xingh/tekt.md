@@ -12,8 +12,8 @@ Set up a complete Tekt development environment in a single script. Covers every 
 ## Quick Start
 
 ```bash
-git clone https://github.com/xingh/tekt.md
-cd tekt.md
+git clone https://github.com/xingh/tektmd
+cd tektmd
 bash install.sh
 ```
 
@@ -460,64 +460,188 @@ claude --help                  # Full command reference
 
 ### 9. OpenClaw
 
-OpenClaw is Tekt's primary agentic workspace runtime — a full-featured agent environment built on top of the Claw architecture. It orchestrates tool calls, manages MCP server connections, and runs multi-step agent workflows.
+OpenClaw is the primary agentic workspace runtime in the Tekt stack — an open-source personal AI assistant that orchestrates tool calls, manages MCP server connections, runs multi-step agent workflows, and connects to messaging platforms (Telegram, WhatsApp, Slack, Discord, Signal, iMessage, Matrix, and more).
 
-**Install (once published):**
+**Requirements:** Node.js 24 (recommended) or Node 22.16+.
+
+**Install — one-line script (recommended):**
 ```bash
-npm install -g @anantcorp/openclaw
+curl -fsSL https://openclaw.ai/install.sh | bash
 ```
 
-**Initialize a workspace:**
+**Install — npm:**
 ```bash
-openclaw init --workspace ~/Tekt/Instances/myworkspace
-openclaw start
+npm install -g openclaw@latest
 ```
 
-> **Note:** OpenClaw is under active development. The install script and public repo will be linked here on release.
+**Install — pnpm:**
+```bash
+pnpm add -g openclaw@latest
+```
+
+**Install — from source:**
+```bash
+git clone https://github.com/openclaw/openclaw.git
+cd openclaw
+pnpm install && pnpm ui:build && pnpm build
+pnpm link --global
+```
+
+**Onboard and start:**
+```bash
+openclaw onboard --install-daemon   # guided setup wizard
+openclaw gateway status             # verify Gateway is running
+openclaw dashboard                  # open Control UI in browser
+```
+
+The onboard wizard walks you through choosing a model provider, setting an API key, and configuring the Gateway daemon (installed as a `launchd` or `systemd` user service).
+
+**Useful commands:**
+```bash
+openclaw --version                  # check installed version
+openclaw doctor                     # diagnose config issues
+openclaw agent --message "Hello"    # send a single message
+openclaw update                     # update to latest
+openclaw update --channel beta      # switch release channel
+```
+
+**Verify:**
+```bash
+openclaw --version
+openclaw gateway status
+```
+
+**Docs:** [docs.openclaw.ai](https://docs.openclaw.ai) · [github.com/openclaw/openclaw](https://github.com/openclaw/openclaw)
 
 ---
 
 ### 10. PicoClaw
 
-PicoClaw is the lightweight Claw runtime for resource-constrained or edge environments — background processing nodes, headless machines, and embedded Tekt instances. Functionally equivalent to OpenClaw but with a minimal footprint.
+PicoClaw is an ultra-lightweight AI assistant written in Go — a single self-contained binary that runs on resource-constrained and edge environments. Built by Sipeed, it runs on $10 hardware with <10MB RAM, supports x86_64, ARM64, and RISC-V, and boots in ~1 second. Used in the Tekt stack for background processing nodes, headless machines, and embedded instances.
 
-**Install (once published):**
+**Requirements:** An LLM API key (OpenAI, Anthropic, Google, etc.). No runtime dependencies — PicoClaw is a single static binary.
+
+**Install — download from picoclaw.io (auto-detects platform):**
+Visit [picoclaw.io](https://picoclaw.io) for one-click download.
+
+**Install — pre-built binary (macOS arm64):**
 ```bash
-npm install -g @anantcorp/picoclaw
+curl -L https://github.com/sipeed/picoclaw/releases/latest/download/picoclaw_darwin_arm64 \
+  -o /usr/local/bin/picoclaw
+chmod +x /usr/local/bin/picoclaw
 ```
 
-**Typical use case (background node):**
+**Install — pre-built binary (Linux amd64):**
 ```bash
-picoclaw start --mode headless --sync-remote s3://tekt-global
+wget https://github.com/sipeed/picoclaw/releases/latest/download/picoclaw_Linux_amd64.tar.gz
+tar xzf picoclaw_Linux_amd64.tar.gz
+sudo mv picoclaw /usr/local/bin/
 ```
 
-> **Note:** PicoClaw is under active development. The install script and public repo will be linked here on release.
+**Install — pre-built binary (Linux arm64):**
+```bash
+wget https://github.com/sipeed/picoclaw/releases/latest/download/picoclaw_Linux_arm64.tar.gz
+tar xzf picoclaw_Linux_arm64.tar.gz
+sudo mv picoclaw /usr/local/bin/
+```
+
+**Install — build from source:**
+```bash
+git clone https://github.com/sipeed/picoclaw.git
+cd picoclaw
+make deps
+make build
+make install
+```
+
+**Onboard and start:**
+```bash
+picoclaw onboard          # interactive setup — creates ~/.picoclaw/config.json
+picoclaw agent            # start interactive chat
+picoclaw agent -m "Hello" # single message mode
+```
+
+**Run as a headless gateway (background node):**
+```bash
+picoclaw gateway
+```
+
+**Verify:**
+```bash
+picoclaw --version
+```
+
+**Docs:** [picoclaw.io](https://picoclaw.io) · [github.com/sipeed/picoclaw](https://github.com/sipeed/picoclaw)
 
 ---
 
 ### 11. Hermes Agent
 
-Hermes is Tekt's coordination and messaging agent — responsible for routing tasks, managing inter-agent communication, and handling async workflows across the Tekt instance graph.
+Hermes is a self-improving AI agent built by Nous Research — the coordination and messaging layer in the Tekt stack. It features a built-in learning loop (auto-creates skills from experience), cross-session memory, and a unified messaging gateway (Telegram, Discord, Slack, WhatsApp, Signal, Email, and more). Supports any LLM provider via OpenRouter, Nous Portal, OpenAI, Anthropic, Google, and custom endpoints.
 
-**Install (once published):**
+**Requirements:** Python 3.11+. The installer handles all dependencies automatically (Python, Node.js, ripgrep, ffmpeg).
+
+**Install — one-line script (recommended):**
 ```bash
-# Install script and repo will be available at release
+curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash
 ```
 
-**Or build from source (internal):**
+Works on Linux, macOS, WSL2, and Android via Termux. The installer clones the repo, creates a virtual environment, installs all dependencies, sets up the global `hermes` command, and launches the setup wizard.
+
+> **Note:** Native Windows is not supported. Use WSL2.
+
+**Install — manual (from source):**
 ```bash
-git clone https://github.com/xingh/hermes-agent
+git clone --recurse-submodules https://github.com/NousResearch/hermes-agent.git
 cd hermes-agent
-go build -o hermes .
-sudo mv hermes /usr/local/bin/
+
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create venv with Python 3.11
+uv venv venv --python 3.11
+export VIRTUAL_ENV="$(pwd)/venv"
+
+# Install with all extras (messaging, cron, voice, etc.)
+uv pip install -e ".[all]"
+
+# Make hermes available globally
+mkdir -p ~/.local/bin
+ln -sf "$(pwd)/venv/bin/hermes" ~/.local/bin/hermes
 ```
 
-**Start the agent:**
+For core agent only (no Telegram/Discord/cron): `uv pip install -e "."`
+
+**First run:**
 ```bash
-hermes start --config ~/.tekt/hermes.yaml
+hermes setup              # full setup wizard (provider, model, messaging)
+hermes                    # start interactive CLI conversation
+hermes gateway            # start messaging gateway
 ```
 
-> **Note:** Hermes Agent is under active development. The public release and install script will be linked here on release.
+**Useful commands:**
+```bash
+hermes model              # choose LLM provider and model
+hermes tools              # configure enabled tools
+hermes doctor             # diagnose configuration issues
+hermes update             # update to latest version
+hermes claw migrate       # migrate settings from OpenClaw
+```
+
+**Migrating from OpenClaw:**
+Hermes auto-detects `~/.openclaw` during setup and offers to import settings, memories, skills, and API keys. Or run manually:
+```bash
+hermes claw migrate --dry-run   # preview what would be migrated
+hermes claw migrate             # interactive migration
+```
+
+**Verify:**
+```bash
+hermes doctor
+hermes --version
+```
+
+**Docs:** [hermes-agent.nousresearch.com/docs](https://hermes-agent.nousresearch.com/docs) · [github.com/NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent)
 
 ---
 
@@ -548,7 +672,7 @@ code --version
 claude --version
 openclaw --version
 picoclaw --version
-hermes --version
+hermes doctor
 ```
 
 ### Configure your Tekt workspace
@@ -571,9 +695,9 @@ PYTHON_VERSION="3.14"
 NODE_VERSION="24"          # Active LTS
 NVM_VERSION="0.40.4"
 
-OPENCLAW_REPO="https://github.com/anantcorp/openclaw"   # update when repo is public
-PICOCLAW_REPO="https://github.com/anantcorp/picoclaw"   # update when repo is public
-HERMES_REPO="https://github.com/anantcorp/hermes-agent" # update when repo is public
+OPENCLAW_REPO="https://github.com/openclaw/openclaw"
+PICOCLAW_REPO="https://github.com/sipeed/picoclaw"
+HERMES_REPO="https://github.com/NousResearch/hermes-agent"
 ```
 
 To skip a specific tool, comment out its call in the `main()` function at the bottom of the script.
@@ -615,8 +739,25 @@ export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 ```
 
-**OpenClaw / PicoClaw / Hermes not yet available**
-These tools are under active development and not yet publicly released. Internal builds can be obtained directly from Anant Corporation.
+**OpenClaw `openclaw: command not found` after npm install**
+Ensure `$(npm prefix -g)/bin` is in your `$PATH`. Check with `npm prefix -g`, then add to your shell profile:
+```bash
+export PATH="$(npm prefix -g)/bin:$PATH"
+```
+
+**PicoClaw binary not found**
+The pre-built binary must be in your `$PATH`. If you downloaded it manually, move it:
+```bash
+sudo mv picoclaw /usr/local/bin/
+sudo chmod +x /usr/local/bin/picoclaw
+```
+
+**Hermes Agent installer fails**
+The installer requires `curl`, `git`, and Python build tools. On Ubuntu/Debian:
+```bash
+sudo apt install -y curl git build-essential
+```
+Then re-run the install script. If `hermes` is not found after install, ensure `~/.local/bin` is in your `$PATH`.
 
 ---
 
@@ -638,8 +779,9 @@ See the [Tekt Workspace Architecture](#architecture-reference) section above for
 
 ## Contributing
 
-Issues and PRs welcome at [github.com/xingh/tekt.md](https://github.com/xingh/tekt.md).
+Issues and PRs welcome at [github.com/xingh/tektmd](https://github.com/xingh/tektmd).
 
 ---
 
 *Maintained by [Anant Corporation](https://anant.us)*
+
