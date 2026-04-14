@@ -3,7 +3,6 @@ layout: layout.njk
 title: tekt.md — Tekt Bootstrap
 permalink: /index.html
 ---
-
 # Tekt Bootstrap — Installation Guide
 
 Set up a complete Tekt development environment in a single script. Covers every tool in the Tekt stack — from the platform runtime layer up through native AI agents.
@@ -26,10 +25,10 @@ bash install.sh
 
 | # | Tool | Version | Purpose |
 |---|------|---------|---------|
-| 1 | [Homebrew](#1-homebrew) | latest | Package manager for macOS/Linux |
-| 2 | [Go](#2-go) | 1.22.4 | Runtime for Tekt-native agents |
-| 3 | [Python](#3-python-via-pyenv) | 3.12.4 via pyenv | Scripting, automation, ML tooling |
-| 4 | [nvm / Node.js / npm](#4-nvm--nodejs--npm) | Node 20 LTS | JavaScript runtime for Claude Code and web tools |
+| 1 | [Homebrew](#1-homebrew) | 5.x | Package manager for macOS/Linux |
+| 2 | [Go](#2-go) | 1.26.2 | Runtime for Tekt-native agents |
+| 3 | [Python](#3-python-via-pyenv) | 3.14.x via pyenv | Scripting, automation, ML tooling |
+| 4 | [nvm / Node.js / npm](#4-nvm--nodejs--npm) | Node 24 LTS | JavaScript runtime for Claude Code and web tools |
 | 5 | [rclone](#5-rclone) | latest | S3/object storage sync (Tekt workspace layer) |
 | 6 | [AWS CLI + s3 utilities](#6-aws-cli--s3-utilities) | v2 | Cloud storage and workspace management |
 | 7 | [Visual Studio Code](#7-visual-studio-code) | latest | Primary editor |
@@ -54,14 +53,34 @@ The script installs all other dependencies automatically.
 
 ### 1. Homebrew
 
-The foundational package manager. On macOS, most tools install via Homebrew casks or formulae. On Linux, Linuxbrew is installed to `~/.linuxbrew`.
+The foundational package manager. On macOS, most tools install via Homebrew casks or formulae. On Linux, Linuxbrew is installed to `/home/linuxbrew/.linuxbrew`.
 
-**Manual install:**
+**Manual install** (from [brew.sh](https://brew.sh)):
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
-**Docs:** [brew.sh](https://brew.sh)
+**Post-install — add Homebrew to PATH:**
+```bash
+# macOS Apple Silicon (/opt/homebrew)
+eval "$(/opt/homebrew/bin/brew shellenv)"
+
+# macOS Intel (/usr/local)
+eval "$(/usr/local/bin/brew shellenv)"
+
+# Linux
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+```
+
+Add the appropriate `eval` line to your shell profile (`~/.zshrc` or `~/.bashrc`).
+
+**Verify:**
+```bash
+brew --version
+brew doctor
+```
+
+**Docs:** [brew.sh](https://brew.sh) · [docs.brew.sh](https://docs.brew.sh)
 
 ---
 
@@ -69,46 +88,94 @@ The foundational package manager. On macOS, most tools install via Homebrew cask
 
 Go is the runtime for several Tekt-native tools and agents. The script installs the official binary distribution to `/usr/local/go`.
 
-**Manual install:**
-```bash
-# macOS
-brew install go
+**Current stable: Go 1.26.2** (released April 2026). Go supports the two most recent major versions (1.26.x and 1.25.x).
 
-# Linux (amd64)
-curl -fsSL https://go.dev/dl/go1.22.4.linux-amd64.tar.gz | sudo tar -C /usr/local -xz
-echo 'export PATH="$PATH:/usr/local/go/bin:$HOME/go/bin"' >> ~/.bashrc
+**Manual install — macOS:**
+```bash
+brew install go
+```
+
+Or download the `.pkg` installer from [go.dev/dl](https://go.dev/dl/).
+
+**Manual install — Linux (amd64):**
+```bash
+curl -fsSL https://go.dev/dl/go1.26.2.linux-amd64.tar.gz -o go.tar.gz
+sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go.tar.gz
+rm go.tar.gz
+echo 'export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin' >> ~/.bashrc
+source ~/.bashrc
+```
+
+**Manual install — Linux (arm64):**
+```bash
+curl -fsSL https://go.dev/dl/go1.26.2.linux-arm64.tar.gz -o go.tar.gz
+sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go.tar.gz
+rm go.tar.gz
+echo 'export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin' >> ~/.bashrc
+source ~/.bashrc
 ```
 
 **Verify:**
 ```bash
 go version
+# → go version go1.26.2 linux/amd64
 ```
 
-**Docs:** [go.dev](https://go.dev)
+**Docs:** [go.dev/doc/install](https://go.dev/doc/install)
 
 ---
 
 ### 3. Python via pyenv
 
-The script installs [pyenv](https://github.com/pyenv/pyenv) for isolated Python version management, then builds Python 3.12.4 and sets it as the global default.
+The script installs [pyenv](https://github.com/pyenv/pyenv) for isolated Python version management, then builds the current stable Python and sets it as the global default.
 
-**Manual install:**
+**Current stable: Python 3.14.x** (3.12.x is now security-only).
+
+**Manual install — pyenv:**
 ```bash
 curl -fsSL https://pyenv.run | bash
-pyenv install 3.12.4
-pyenv global 3.12.4
 ```
 
-**Add to shell profile (`~/.zshrc` or `~/.bashrc`):**
+Or on macOS: `brew install pyenv`
+
+**Shell configuration — Bash** (add to `~/.bashrc` and `~/.profile`):
 ```bash
 export PYENV_ROOT="$HOME/.pyenv"
-export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init -)"
+[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init - bash)"
+```
+
+**Shell configuration — Zsh** (add to `~/.zshrc`):
+```bash
+export PYENV_ROOT="$HOME/.pyenv"
+[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init - zsh)"
+```
+
+**Build dependencies — Ubuntu/Debian:**
+```bash
+sudo apt update && sudo apt install -y make build-essential libssl-dev zlib1g-dev \
+  libbz2-dev libreadline-dev libsqlite3-dev curl git \
+  libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
+```
+
+**Build dependencies — Fedora/RHEL:**
+```bash
+sudo dnf install -y make gcc patch zlib-devel bzip2 bzip2-devel \
+  readline-devel sqlite sqlite-devel openssl-devel tk-devel \
+  libffi-devel xz-devel libuuid-devel gdbm-libs libnsl2
+```
+
+**Install Python:**
+```bash
+pyenv install 3.14       # auto-resolves to latest 3.14.x patch
+pyenv global 3.14
 ```
 
 **Verify:**
 ```bash
-python3 --version
+pyenv --version
+python --version
 pip --version
 ```
 
@@ -118,25 +185,42 @@ pip --version
 
 ### 4. nvm / Node.js / npm
 
-[nvm](https://github.com/nvm-sh/nvm) (Node Version Manager) is installed first, then Node.js 20 LTS and the latest npm. Node 20 is set as the default.
+[nvm](https://github.com/nvm-sh/nvm) (Node Version Manager) is installed first, then the current active LTS release of Node.js.
 
-**Manual install:**
+**Current active LTS: Node.js 24 "Krypton"**. Node 22 is in maintenance LTS. Node 20 reached end-of-life in April 2026.
+
+**Manual install — nvm v0.40.4:**
 ```bash
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
-source ~/.nvm/nvm.sh
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
+```
 
-nvm install 20
-nvm use 20
-nvm alias default 20
+Or with wget:
+```bash
+wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
+```
+
+The script automatically adds the following to your shell profile. If needed manually:
+```bash
+export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+```
+
+**Install Node.js:**
+```bash
+nvm install --lts          # installs Node 24.x (active LTS)
+nvm alias default lts/*    # set as default
 ```
 
 **Verify:**
 ```bash
-node --version
+command -v nvm    # outputs: nvm (it's a shell function, not a binary)
+nvm --version     # → 0.40.4
+node --version    # → v24.x.x
 npm --version
 ```
 
-**Docs:** [github.com/nvm-sh/nvm](https://github.com/nvm-sh/nvm)
+**Docs:** [github.com/nvm-sh/nvm](https://github.com/nvm-sh/nvm) · [nodejs.org](https://nodejs.org)
 
 ---
 
@@ -144,9 +228,26 @@ npm --version
 
 rclone is the sync backbone for Tekt workspaces — it mirrors the global workspace from S3 to local instances and back. The workspace structure uses `Tekt/Global/Workspaces` for the S3-synced global layer and `Tekt/Instances/` for local git-backed per-installation workspaces.
 
-**Manual install:**
+**Manual install — Linux/macOS (script):**
 ```bash
-curl -fsSL https://rclone.org/install.sh | sudo bash
+sudo -v ; curl https://rclone.org/install.sh | sudo bash
+```
+
+**macOS (Homebrew):**
+```bash
+brew install rclone
+```
+
+> **Note:** Homebrew installs do not support FUSE mounting. Use the script install if you need mount support.
+
+**Linux manual (amd64):**
+```bash
+curl -O https://downloads.rclone.org/rclone-current-linux-amd64.zip
+unzip rclone-current-linux-amd64.zip
+cd rclone-*-linux-amd64
+sudo cp rclone /usr/bin/
+sudo chown root:root /usr/bin/rclone
+sudo chmod 755 /usr/bin/rclone
 ```
 
 **Configure an S3-compatible remote:**
@@ -160,7 +261,17 @@ rclone config
 rclone sync s3:tekt-global/Workspaces ~/Tekt/Global/Workspaces --progress
 ```
 
-**Docs:** [rclone.org](https://rclone.org)
+**Self-update** (for existing installs):
+```bash
+rclone selfupdate
+```
+
+**Verify:**
+```bash
+rclone version
+```
+
+**Docs:** [rclone.org](https://rclone.org) · [rclone.org/install](https://rclone.org/install/)
 
 ---
 
@@ -172,14 +283,32 @@ Three tools are installed in this section:
 
 The primary interface for AWS services including S3, IAM, and EC2.
 
+**macOS:**
 ```bash
-# macOS
-brew install awscli
+curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
+sudo installer -pkg AWSCLIV2.pkg -target /
+rm AWSCLIV2.pkg
+```
 
-# Linux (amd64)
-curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o awscliv2.zip
+**Linux (x86_64):**
+```bash
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
 unzip awscliv2.zip
 sudo ./aws/install
+rm -rf aws awscliv2.zip
+```
+
+**Linux (ARM64):**
+```bash
+curl "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+rm -rf aws awscliv2.zip
+```
+
+**Update an existing install:**
+```bash
+sudo ./aws/install --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli --update
 ```
 
 **Configure:**
@@ -205,34 +334,63 @@ Extremely fast parallel S3 transfer tool, ideal for large workspace syncs.
 # macOS
 brew install peak/tap/s5cmd
 
-# Linux (via Go)
-go install github.com/peak/s5cmd/v2@latest
+# Linux / any platform with Go
+go install github.com/peak/s5cmd/v2@v2.3.0
 ```
+
+Pre-built binaries and `.deb` packages are also available on the [GitHub releases page](https://github.com/peak/s5cmd/releases).
 
 **Example — sync workspace:**
 ```bash
 s5cmd sync s3://tekt-global/Workspaces/ ~/Tekt/Global/Workspaces/
 ```
 
-**Docs:** [AWS CLI](https://docs.aws.amazon.com/cli/) · [s3cmd](https://s3tools.org/s3cmd) · [s5cmd](https://github.com/peak/s5cmd)
+**Docs:** [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) · [s3cmd](https://s3tools.org/s3cmd) · [s5cmd](https://github.com/peak/s5cmd)
 
 ---
 
 ### 7. Visual Studio Code
 
-The primary editor for Tekt development. The script installs via Homebrew Cask on macOS and via the Microsoft apt/dnf repo on Linux.
+The primary editor for Tekt development.
 
-**Manual install:**
-Download from [code.visualstudio.com/download](https://code.visualstudio.com/download) or:
-
+**macOS (Homebrew):**
 ```bash
-# macOS
 brew install --cask visual-studio-code
+```
 
-# Ubuntu/Debian
-wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | sudo tee /usr/share/keyrings/packages.microsoft.gpg > /dev/null
-echo "deb [arch=amd64 signed-by=/usr/share/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" | sudo tee /etc/apt/sources.list.d/vscode.list
-sudo apt update && sudo apt install code
+Or download from [code.visualstudio.com/download](https://code.visualstudio.com/download).
+
+**Ubuntu/Debian (DEB822 format):**
+```bash
+# Import GPG key
+sudo apt-get install -y wget gpg
+wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > microsoft.gpg
+sudo install -D -o root -g root -m 644 microsoft.gpg /usr/share/keyrings/microsoft.gpg
+rm microsoft.gpg
+
+# Create repo file (DEB822 .sources format)
+cat << 'EOF' | sudo tee /etc/apt/sources.list.d/vscode.sources
+Types: deb
+URIs: https://packages.microsoft.com/repos/code
+Suites: stable
+Components: main
+Architectures: amd64,arm64,armhf
+Signed-By: /usr/share/keyrings/microsoft.gpg
+EOF
+
+# Install
+sudo apt-get install -y apt-transport-https
+sudo apt-get update
+sudo apt-get install -y code
+```
+
+**Fedora/RHEL:**
+```bash
+sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
+echo -e "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\nautorefresh=1\ntype=rpm-md\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" \
+  | sudo tee /etc/yum.repos.d/vscode.repo > /dev/null
+sudo dnf check-update
+sudo dnf install -y code
 ```
 
 **Recommended extensions for Tekt development:**
@@ -244,33 +402,59 @@ code --install-extension dbaeumer.vscode-eslint
 code --install-extension esbenp.prettier-vscode
 ```
 
-**Docs:** [code.visualstudio.com](https://code.visualstudio.com)
+**Verify:**
+```bash
+code --version
+```
+
+**Docs:** [code.visualstudio.com](https://code.visualstudio.com) · [VS Code on Linux](https://code.visualstudio.com/docs/setup/linux)
 
 ---
 
 ### 8. Claude Code
 
-Anthropic's agentic coding CLI. Claude Code runs inside your terminal and can read, write, and execute files, run tests, and interact with your codebase using the full Claude API.
+Anthropic's agentic coding CLI. Claude Code runs inside your terminal and can read, write, and execute files, run tests, and interact with your codebase using the full Claude API. Open-sourced in March 2026.
 
-**Install:**
+**System requirements:** macOS 13.0+, Ubuntu 20.04+/Debian 10+, 4 GB+ RAM, x64 or ARM64. Requires Node.js 18+ (for npm method) or no prerequisites (for native installer).
+
+**Install — native installer (recommended):**
+```bash
+curl -fsSL https://claude.ai/install.sh | bash
+```
+
+**Install — Homebrew:**
+```bash
+brew install --cask claude-code
+```
+
+**Install — npm (deprecated, still functional):**
 ```bash
 npm install -g @anthropic-ai/claude-code
 ```
 
+> **Note:** Anthropic recommends migrating from npm to the native installer. After installing natively, run `npm uninstall -g @anthropic-ai/claude-code` to remove the npm version.
+
 **First run:**
 ```bash
 claude
-# Follow the authentication prompt (requires Anthropic account)
+# Follow the browser-based authentication prompt (requires Anthropic account)
 ```
 
-**Useful flags:**
+Alternatively, set `ANTHROPIC_API_KEY` for API key authentication. Also supports Amazon Bedrock, Google Vertex AI, and Microsoft Foundry as alternative backends.
+
+**Updates:**
+Native installs auto-update. Manual update: `claude update`. Release channels (`stable` or `latest`) are configurable in `~/.claude/settings.json`.
+
+**Useful commands:**
 ```bash
-claude --help                  # Full command reference
+claude --version               # Check installed version
+claude doctor                  # Diagnose configuration issues
 claude --model claude-sonnet-4 # Select model
 claude --print "explain this"  # Non-interactive mode
+claude --help                  # Full command reference
 ```
 
-**Docs:** [docs.anthropic.com/claude-code](https://docs.anthropic.com/claude-code)
+**Docs:** [code.claude.com](https://code.claude.com/docs/en/setup) · [github.com/anthropics/claude-code](https://github.com/anthropics/claude-code)
 
 ---
 
@@ -356,7 +540,7 @@ source ~/.bashrc
 ```bash
 brew --version
 go version
-python3 --version
+python --version
 node --version && npm --version
 rclone version
 aws --version
@@ -382,14 +566,14 @@ openclaw init
 The top of `install.sh` exposes version pins and repo URLs as variables. Edit these before running to lock specific versions:
 
 ```bash
-GO_VERSION="1.22.4"
-PYTHON_VERSION="3.12.4"
-NODE_VERSION="20"
-NVM_VERSION="0.40.1"
+GO_VERSION="1.26.2"
+PYTHON_VERSION="3.14"
+NODE_VERSION="24"          # Active LTS
+NVM_VERSION="0.40.4"
 
-OPENCLAW_REPO="https://github.com/xingh/openclaw"   # update when repo is public
-PICOCLAW_REPO="https://github.com/xingh/picoclaw"   # update when repo is public
-HERMES_REPO="https://github.com/xingh/hermes-agent" # update when repo is public
+OPENCLAW_REPO="https://github.com/anantcorp/openclaw"   # update when repo is public
+PICOCLAW_REPO="https://github.com/anantcorp/picoclaw"   # update when repo is public
+HERMES_REPO="https://github.com/anantcorp/hermes-agent" # update when repo is public
 ```
 
 To skip a specific tool, comment out its call in the `main()` function at the bottom of the script.
@@ -413,12 +597,23 @@ eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 **Python build fails on Linux**
 Install build dependencies first:
 ```bash
-sudo apt install build-essential libssl-dev zlib1g-dev libbz2-dev \
-  libreadline-dev libsqlite3-dev liblzma-dev
+sudo apt install -y make build-essential libssl-dev zlib1g-dev libbz2-dev \
+  libreadline-dev libsqlite3-dev libncursesw5-dev xz-utils tk-dev \
+  libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
 ```
 
 **AWS CLI install fails on ARM Linux**
 Ensure you're using the `aarch64` build — the script auto-detects, but verify `uname -m` returns `aarch64`.
+
+**Claude Code authentication issues**
+Run `claude doctor` to diagnose. Ensure you have a valid Anthropic account (Pro, Max, Teams, Enterprise, or Console/API plan).
+
+**nvm: `command -v nvm` returns nothing**
+nvm is a shell function, not a binary. Make sure your shell profile sources `$NVM_DIR/nvm.sh`:
+```bash
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+```
 
 **OpenClaw / PicoClaw / Hermes not yet available**
 These tools are under active development and not yet publicly released. Internal builds can be obtained directly from Anant Corporation.
