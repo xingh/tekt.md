@@ -15,7 +15,7 @@ Or clone and run locally:
 ```bash
 git clone https://github.com/anantcorp/tekt
 cd tekt
-bash tekt-bootstrap.sh
+bash install.sh
 ```
 
 **Supported platforms:** macOS (Intel + Apple Silicon), Ubuntu/Debian, Fedora/RHEL, Arch Linux.

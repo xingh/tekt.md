@@ -10,7 +10,7 @@
 # Supported: macOS (Intel + Apple Silicon), Ubuntu/Debian, Fedora/RHEL
 # Usage:     curl -fsSL https://tekt.md/install.sh | bash
 #            — or —
-#            bash tekt-bootstrap.sh
+#            bash install.sh
 # =============================================================================
 
 set -euo pipefail
