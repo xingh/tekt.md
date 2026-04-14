@@ -103,6 +103,11 @@ reload_path() {
   # nvm
   export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
   [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
+  # npm global bin (OpenClaw, other global npm packages)
+  if command_exists npm; then
+    local npm_bin; npm_bin="$(npm prefix -g 2>/dev/null)/bin"
+    [[ -d "$npm_bin" ]] && export PATH="$npm_bin:$PATH"
+  fi
 }
 
 append_to_shell_profile() {
@@ -110,6 +115,14 @@ append_to_shell_profile() {
   for f in "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.zshrc"; do
     [ -f "$f" ] && grep -qF "$line" "$f" 2>/dev/null || echo "$line" >> "$f"
   done
+}
+
+# ── Ensure ~/.local/bin exists and is in PATH ─────────────────────────────────
+# Called early in main() — PicoClaw (no-sudo fallback) and Hermes both install here
+ensure_local_bin() {
+  mkdir -p "$HOME/.local/bin"
+  append_to_shell_profile 'export PATH="$HOME/.local/bin:$PATH"'
+  export PATH="$HOME/.local/bin:$PATH"
 }
 
 # =============================================================================
@@ -506,6 +519,21 @@ install_openclaw() {
 
   if command_exists openclaw; then
     log "Run 'openclaw onboard --install-daemon' to complete setup."
+  else
+    # npm global bin may not be in PATH — add it
+    if command_exists npm; then
+      local npm_bin; npm_bin="$(npm prefix -g 2>/dev/null)/bin"
+      if [[ -d "$npm_bin" ]]; then
+        export PATH="$npm_bin:$PATH"
+        append_to_shell_profile "export PATH=\"$(npm prefix -g)/bin:\$PATH\""
+        log "Added npm global bin ($npm_bin) to shell profile."
+      fi
+    fi
+    if command_exists openclaw; then
+      log "Run 'openclaw onboard --install-daemon' to complete setup."
+    else
+      warn "openclaw not found in PATH after install. Restart your shell or run: source ~/.bashrc"
+    fi
   fi
 }
 
@@ -543,8 +571,11 @@ install_picoclaw() {
     log "Downloading PicoClaw for ${os}/${arch}..."
     curl -fsSL "$dl_url" -o /tmp/picoclaw
     chmod +x /tmp/picoclaw
-    require_sudo
-    $SUDO mv /tmp/picoclaw /usr/local/bin/picoclaw
+    if command_exists sudo; then
+      sudo mv /tmp/picoclaw /usr/local/bin/picoclaw
+    else
+      mv /tmp/picoclaw "$HOME/.local/bin/picoclaw"
+    fi
   else
     # Linux: tarball
     binary_name="picoclaw_${os}_${arch}.tar.gz"
@@ -552,9 +583,13 @@ install_picoclaw() {
     log "Downloading PicoClaw for ${os}/${arch}..."
     curl -fsSL "$dl_url" -o /tmp/picoclaw.tar.gz
     tar xzf /tmp/picoclaw.tar.gz -C /tmp/
-    require_sudo
-    $SUDO mv /tmp/picoclaw /usr/local/bin/picoclaw
-    $SUDO chmod +x /usr/local/bin/picoclaw
+    if [ -n "${SUDO:-}" ] 2>/dev/null; then
+      $SUDO mv /tmp/picoclaw /usr/local/bin/picoclaw
+      $SUDO chmod +x /usr/local/bin/picoclaw
+    else
+      mv /tmp/picoclaw "$HOME/.local/bin/picoclaw"
+      chmod +x "$HOME/.local/bin/picoclaw"
+    fi
     rm -f /tmp/picoclaw.tar.gz
   fi
 
@@ -583,12 +618,18 @@ install_hermes() {
   if curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh -o /tmp/hermes-install.sh 2>/dev/null; then
     bash /tmp/hermes-install.sh
     rm -f /tmp/hermes-install.sh
+
+    # Hermes symlinks to ~/.local/bin/hermes — ensure it's in PATH for this session
+    export PATH="$HOME/.local/bin:$PATH"
+
     if command_exists hermes; then
       success "Hermes Agent installed"
       log "Run 'hermes setup' to configure your LLM provider and messaging."
     else
       warn "Hermes installed but 'hermes' not found in PATH."
-      warn "Ensure ~/.local/bin is in your PATH, then restart your shell."
+      warn "The installer may have placed the binary elsewhere. Check with:"
+      warn "  find ~ -name hermes -type f -o -name hermes -type l 2>/dev/null | head -5"
+      warn "Then symlink it: ln -sf /path/to/hermes ~/.local/bin/hermes"
     fi
   else
     warn "Hermes install script not reachable."
@@ -672,6 +713,9 @@ main() {
   echo ""
   log "OS: $(uname -s) / Arch: $(arch_type)"
   echo ""
+
+  # Ensure ~/.local/bin exists and is in PATH early — PicoClaw and Hermes install here
+  ensure_local_bin
 
   install_homebrew
   install_system_deps
