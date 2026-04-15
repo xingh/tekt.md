@@ -47,38 +47,39 @@ bash install.sh
 
 | # | Tool | Version | Purpose |
 |---|------|---------|---------|
-| 1 | [Homebrew](#1-homebrew) | 5.x | Package manager for macOS/Linux |
-| 2 | [Go](#2-go) | 1.26.2 | Runtime for Tekt-native agents |
-| 3 | [Python](#3-python-via-pyenv) | 3.14.x via pyenv | Scripting, automation, ML tooling |
-| 4 | [nvm / Node.js / npm](#4-nvm--nodejs--npm) | Node 24 LTS | JavaScript runtime and web tools |
-| 5 | [Visual Studio Code](#5-visual-studio-code) | latest | Primary editor |
-| 6 | [Docker & Docker Compose](#6-docker--docker-compose) | latest | Container runtime and orchestration |
+| 1 | [Git](#1-git) | latest | Version control — required by nearly every other tool |
+| 2 | [Homebrew](#2-homebrew) | 5.x | Package manager for macOS/Linux |
+| 3 | [Go](#3-go) | 1.26.2 | Runtime for Tekt-native agents |
+| 4 | [Python](#4-python-via-pyenv) | 3.14.x via pyenv | Scripting, automation, ML tooling |
+| 5 | [nvm / Node.js / npm](#5-nvm--nodejs--npm) | Node 24 LTS | JavaScript runtime and web tools |
+| 6 | [Visual Studio Code](#6-visual-studio-code) | latest | Primary editor |
+| 7 | [Docker & Docker Compose](#7-docker--docker-compose) | latest | Container runtime and orchestration |
 
 ### Tekt.Base — Communications & Sync
 
 | # | Tool | Version | Purpose |
 |---|------|---------|---------|
-| 7 | [rclone](#7-rclone) | latest | S3/object storage sync (Tekt workspace layer) |
-| 8 | [AWS CLI + s3 utilities](#8-aws-cli--s3-utilities) | v2 | Cloud storage and workspace management |
+| 8 | [rclone](#8-rclone) | latest | S3/object storage sync (Tekt workspace layer) |
+| 9 | [AWS CLI + s3 utilities](#9-aws-cli--s3-utilities) | v2 | Cloud storage and workspace management |
 
 ### Tekt.Iris — Intelligence
 
 | # | Tool | Version | Purpose |
 |---|------|---------|---------|
-| 9 | [Claude Code](#9-claude-code) | latest | Anthropic agentic coding CLI |
-| 10 | [OpenClaw](#10-openclaw) | latest | Personal AI assistant and agent workspace |
-| 11 | [PicoClaw](#11-picoclaw) | latest | Lightweight AI agent for edge/low-resource nodes |
-| 12 | [Hermes Agent](#12-hermes-agent) | latest | Self-improving AI agent with messaging gateway |
+| 10 | [Claude Code](#10-claude-code) | latest | Anthropic agentic coding CLI |
+| 11 | [OpenClaw](#11-openclaw) | latest | Personal AI assistant and agent workspace |
+| 12 | [PicoClaw](#12-picoclaw) | latest | Lightweight AI agent for edge/low-resource nodes |
+| 13 | [Hermes Agent](#13-hermes-agent) | latest | Self-improving AI agent with messaging gateway |
 
 ---
 
 ## Prerequisites
 
 - **macOS:** Xcode Command Line Tools (`xcode-select --install`)
-- **Linux:** `curl`, `git`, `sudo` access
+- **Linux:** `curl`, `sudo` access
 - **All:** At least 5 GB free disk space, a reliable internet connection
 
-The script installs all other dependencies automatically.
+The script installs Git and all other dependencies automatically.
 
 ---
 
@@ -89,9 +90,51 @@ The script installs all other dependencies automatically.
 
 ## Tekt.Dev — Development Environment
 
-### 1. Homebrew
+### 1. Git
 
-The foundational package manager. On macOS, most tools install via Homebrew casks or formulae. On Linux, Linuxbrew is installed to `/home/linuxbrew/.linuxbrew`.
+Git is the foundational version control system — nearly every other tool in this stack depends on it (Homebrew, pyenv, nvm, OpenClaw, PicoClaw, Hermes Agent, etc.). The script ensures Git is installed before anything else.
+
+**macOS:**
+
+Git ships with Xcode Command Line Tools. If not already installed:
+```bash
+xcode-select --install
+```
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get update
+sudo apt-get install -y git
+```
+
+**Fedora/RHEL:**
+```bash
+sudo dnf install -y git
+```
+
+**Arch:**
+```bash
+sudo pacman -S --noconfirm git
+```
+
+**Configure (first-time setup):**
+```bash
+git config --global user.name "Your Name"
+git config --global user.email "you@example.com"
+```
+
+**Verify:**
+```bash
+git --version
+```
+
+**Docs:** [git-scm.com](https://git-scm.com) · [git-scm.com/book](https://git-scm.com/book/en/v2)
+
+---
+
+### 2. Homebrew
+
+The foundational package manager. On macOS, most tools install via Homebrew casks or formulae. On Linux, Linuxbrew is installed to `/home/linuxbrew/.linuxbrew`. Requires Git.
 
 **Manual install** (from [brew.sh](https://brew.sh)):
 ```bash
@@ -122,7 +165,7 @@ brew doctor
 
 ---
 
-### 2. Go
+### 3. Go
 
 Go is the runtime for several Tekt-native tools and agents. The script installs the official binary distribution to `/usr/local/go`.
 
@@ -163,7 +206,7 @@ go version
 
 ---
 
-### 3. Python via pyenv
+### 4. Python via pyenv
 
 The script installs [pyenv](https://github.com/pyenv/pyenv) for isolated Python version management, then builds the current stable Python and sets it as the global default.
 
@@ -221,7 +264,7 @@ pip --version
 
 ---
 
-### 4. nvm / Node.js / npm
+### 5. nvm / Node.js / npm
 
 [nvm](https://github.com/nvm-sh/nvm) (Node Version Manager) is installed first, then the current active LTS release of Node.js.
 
@@ -263,7 +306,7 @@ npm --version
 ---
 ---
 
-### 5. Visual Studio Code
+### 6. Visual Studio Code
 
 The primary editor for Tekt development.
 
@@ -327,7 +370,7 @@ code --version
 
 ---
 
-### 6. Docker & Docker Compose
+### 7. Docker & Docker Compose
 
 Docker is the container runtime used across the Tekt stack for running isolated agent environments, services, and development infrastructure. Docker Compose V2 is included as a plugin (`docker compose`) and handles multi-container orchestration.
 
@@ -397,7 +440,7 @@ sudo docker run hello-world
 
 ## Tekt.Base — Communications & Sync
 
-### 7. rclone
+### 8. rclone
 
 rclone is the sync backbone for Tekt workspaces — it mirrors the global workspace from S3 to local instances and back. The workspace structure uses `Tekt/Global/Workspaces` for the S3-synced global layer and `Tekt/Instances/` for local git-backed per-installation workspaces.
 
@@ -447,7 +490,7 @@ rclone version
 **Docs:** [rclone.org](https://rclone.org) · [rclone.org/install](https://rclone.org/install/)
 
 ---
-### 8. AWS CLI + s3 utilities
+### 9. AWS CLI + s3 utilities
 
 Three tools are installed in this section:
 
@@ -525,7 +568,7 @@ s5cmd sync s3://tekt-global/Workspaces/ ~/Tekt/Global/Workspaces/
 
 ## Tekt.Iris — Intelligence
 
-### 9. Claude Code
+### 10. Claude Code
 
 Anthropic's agentic coding CLI. Claude Code runs inside your terminal and can read, write, and execute files, run tests, and interact with your codebase using the full Claude API. Open-sourced in March 2026.
 
@@ -572,7 +615,7 @@ claude --help                  # Full command reference
 
 ---
 
-### 10. OpenClaw
+### 11. OpenClaw
 
 OpenClaw is the primary agentic workspace runtime in the Tekt stack — an open-source personal AI assistant that orchestrates tool calls, manages MCP server connections, runs multi-step agent workflows, and connects to messaging platforms (Telegram, WhatsApp, Slack, Discord, Signal, iMessage, Matrix, and more).
 
@@ -629,7 +672,7 @@ openclaw gateway status
 
 ---
 
-### 11. PicoClaw
+### 12. PicoClaw
 
 PicoClaw is an ultra-lightweight AI assistant written in Go — a single self-contained binary that runs on resource-constrained and edge environments. Built by Sipeed, it runs on $10 hardware with <10MB RAM, supports x86_64, ARM64, and RISC-V, and boots in ~1 second. Used in the Tekt stack for background processing nodes, headless machines, and embedded instances.
 
@@ -689,7 +732,7 @@ picoclaw --version
 
 ---
 
-### 12. Hermes Agent
+### 13. Hermes Agent
 
 Hermes is a self-improving AI agent built by Nous Research — the coordination and messaging layer in the Tekt stack. It features a built-in learning loop (auto-creates skills from experience), cross-session memory, and a unified messaging gateway (Telegram, Discord, Slack, WhatsApp, Signal, Email, and more). Supports any LLM provider via OpenRouter, Nous Portal, OpenAI, Anthropic, Google, and custom endpoints.
 
@@ -778,6 +821,7 @@ source ~/.bashrc
 
 ```bash
 # Tekt.Dev
+git --version
 brew --version
 go version
 python --version
@@ -911,6 +955,4 @@ Issues and PRs welcome at [github.com/xingh/tekt.md](https://github.com/xingh/te
 
 ---
 
-*Maintained by Rahul Singh [Anant Corporation](https://anant.us)*
-
----
+*Maintained by [Anant Corporation](https://anant.us)*
