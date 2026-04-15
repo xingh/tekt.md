@@ -43,19 +43,32 @@ bash install.sh
 
 ## What Gets Installed
 
+### Tekt.Dev — Development Environment
+
 | # | Tool | Version | Purpose |
 |---|------|---------|---------|
 | 1 | [Homebrew](#1-homebrew) | 5.x | Package manager for macOS/Linux |
 | 2 | [Go](#2-go) | 1.26.2 | Runtime for Tekt-native agents |
 | 3 | [Python](#3-python-via-pyenv) | 3.14.x via pyenv | Scripting, automation, ML tooling |
-| 4 | [nvm / Node.js / npm](#4-nvm--nodejs--npm) | Node 24 LTS | JavaScript runtime for Claude Code and web tools |
-| 5 | [rclone](#5-rclone) | latest | S3/object storage sync (Tekt workspace layer) |
-| 6 | [AWS CLI + s3 utilities](#6-aws-cli--s3-utilities) | v2 | Cloud storage and workspace management |
-| 7 | [Visual Studio Code](#7-visual-studio-code) | latest | Primary editor |
-| 8 | [Claude Code](#8-claude-code) | latest | Anthropic CLI agent for agentic coding |
-| 9 | [OpenClaw](#9-openclaw) | latest | Tekt full-featured agent workspace |
-| 10 | [PicoClaw](#10-picoclaw) | latest | Lightweight Claw runtime for edge/low-resource nodes |
-| 11 | [Hermes Agent](#11-hermes-agent) | latest | Tekt messaging and coordination agent |
+| 4 | [nvm / Node.js / npm](#4-nvm--nodejs--npm) | Node 24 LTS | JavaScript runtime and web tools |
+| 5 | [Visual Studio Code](#5-visual-studio-code) | latest | Primary editor |
+| 6 | [Docker & Docker Compose](#6-docker--docker-compose) | latest | Container runtime and orchestration |
+
+### Tekt.Base — Communications & Sync
+
+| # | Tool | Version | Purpose |
+|---|------|---------|---------|
+| 7 | [rclone](#7-rclone) | latest | S3/object storage sync (Tekt workspace layer) |
+| 8 | [AWS CLI + s3 utilities](#8-aws-cli--s3-utilities) | v2 | Cloud storage and workspace management |
+
+### Tekt.Iris — Intelligence
+
+| # | Tool | Version | Purpose |
+|---|------|---------|---------|
+| 9 | [Claude Code](#9-claude-code) | latest | Anthropic agentic coding CLI |
+| 10 | [OpenClaw](#10-openclaw) | latest | Personal AI assistant and agent workspace |
+| 11 | [PicoClaw](#11-picoclaw) | latest | Lightweight AI agent for edge/low-resource nodes |
+| 12 | [Hermes Agent](#12-hermes-agent) | latest | Self-improving AI agent with messaging gateway |
 
 ---
 
@@ -70,6 +83,11 @@ The script installs all other dependencies automatically.
 ---
 
 ## Tool Details
+
+
+---
+
+## Tekt.Dev — Development Environment
 
 ### 1. Homebrew
 
@@ -243,8 +261,143 @@ npm --version
 **Docs:** [github.com/nvm-sh/nvm](https://github.com/nvm-sh/nvm) · [nodejs.org](https://nodejs.org)
 
 ---
+---
 
-### 5. rclone
+### 5. Visual Studio Code
+
+The primary editor for Tekt development.
+
+**macOS (Homebrew):**
+```bash
+brew install --cask visual-studio-code
+```
+
+Or download from [code.visualstudio.com/download](https://code.visualstudio.com/download).
+
+**Ubuntu/Debian (DEB822 format):**
+```bash
+# Import GPG key
+sudo apt-get install -y wget gpg
+wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > microsoft.gpg
+sudo install -D -o root -g root -m 644 microsoft.gpg /usr/share/keyrings/microsoft.gpg
+rm microsoft.gpg
+
+# Create repo file (DEB822 .sources format)
+cat << 'EOF' | sudo tee /etc/apt/sources.list.d/vscode.sources
+Types: deb
+URIs: https://packages.microsoft.com/repos/code
+Suites: stable
+Components: main
+Architectures: amd64,arm64,armhf
+Signed-By: /usr/share/keyrings/microsoft.gpg
+EOF
+
+# Install
+sudo apt-get install -y apt-transport-https
+sudo apt-get update
+sudo apt-get install -y code
+```
+
+**Fedora/RHEL:**
+```bash
+sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
+echo -e "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\nautorefresh=1\ntype=rpm-md\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" \
+  | sudo tee /etc/yum.repos.d/vscode.repo > /dev/null
+sudo dnf check-update
+sudo dnf install -y code
+```
+
+**Recommended extensions for Tekt development:**
+```bash
+code --install-extension ms-python.python
+code --install-extension golang.go
+code --install-extension anthropics.claude-code
+code --install-extension dbaeumer.vscode-eslint
+code --install-extension esbenp.prettier-vscode
+```
+
+**Verify:**
+```bash
+code --version
+```
+
+**Docs:** [code.visualstudio.com](https://code.visualstudio.com) · [VS Code on Linux](https://code.visualstudio.com/docs/setup/linux)
+
+---
+
+---
+
+### 6. Docker & Docker Compose
+
+Docker is the container runtime used across the Tekt stack for running isolated agent environments, services, and development infrastructure. Docker Compose V2 is included as a plugin (`docker compose`) and handles multi-container orchestration.
+
+**macOS (Docker Desktop via Homebrew):**
+```bash
+brew install --cask docker
+```
+
+Then launch Docker Desktop from Applications to start the daemon.
+
+**Linux — convenience script (recommended for dev environments):**
+```bash
+curl -fsSL https://get.docker.com | sh
+```
+
+This installs Docker Engine, Docker CLI, containerd, Docker Buildx, and Docker Compose plugin in one command.
+
+**Linux — Ubuntu/Debian (official apt repo):**
+```bash
+# Remove conflicting packages
+for pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc; do
+  sudo apt-get remove -y $pkg 2>/dev/null || true
+done
+
+# Add Docker's official GPG key and repo
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# Install
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+```
+
+**Linux — Fedora/RHEL:**
+```bash
+sudo dnf -y install dnf-plugins-core
+sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo systemctl start docker
+sudo systemctl enable docker
+```
+
+**Post-install — run Docker without sudo (Linux):**
+```bash
+sudo usermod -aG docker $USER
+# Log out and back in for group membership to take effect
+```
+
+**Verify:**
+```bash
+docker --version
+docker compose version
+sudo docker run hello-world
+```
+
+**Docs:** [docs.docker.com/engine/install](https://docs.docker.com/engine/install/) · [docs.docker.com/compose](https://docs.docker.com/compose/)
+
+---
+
+## Tekt.Base — Communications & Sync
+
+### 7. rclone
 
 rclone is the sync backbone for Tekt workspaces — it mirrors the global workspace from S3 to local instances and back. The workspace structure uses `Tekt/Global/Workspaces` for the S3-synced global layer and `Tekt/Instances/` for local git-backed per-installation workspaces.
 
@@ -294,8 +447,7 @@ rclone version
 **Docs:** [rclone.org](https://rclone.org) · [rclone.org/install](https://rclone.org/install/)
 
 ---
-
-### 6. AWS CLI + s3 utilities
+### 8. AWS CLI + s3 utilities
 
 Three tools are installed in this section:
 
@@ -369,69 +521,11 @@ s5cmd sync s3://tekt-global/Workspaces/ ~/Tekt/Global/Workspaces/
 
 ---
 
-### 7. Visual Studio Code
-
-The primary editor for Tekt development.
-
-**macOS (Homebrew):**
-```bash
-brew install --cask visual-studio-code
-```
-
-Or download from [code.visualstudio.com/download](https://code.visualstudio.com/download).
-
-**Ubuntu/Debian (DEB822 format):**
-```bash
-# Import GPG key
-sudo apt-get install -y wget gpg
-wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > microsoft.gpg
-sudo install -D -o root -g root -m 644 microsoft.gpg /usr/share/keyrings/microsoft.gpg
-rm microsoft.gpg
-
-# Create repo file (DEB822 .sources format)
-cat << 'EOF' | sudo tee /etc/apt/sources.list.d/vscode.sources
-Types: deb
-URIs: https://packages.microsoft.com/repos/code
-Suites: stable
-Components: main
-Architectures: amd64,arm64,armhf
-Signed-By: /usr/share/keyrings/microsoft.gpg
-EOF
-
-# Install
-sudo apt-get install -y apt-transport-https
-sudo apt-get update
-sudo apt-get install -y code
-```
-
-**Fedora/RHEL:**
-```bash
-sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
-echo -e "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\nautorefresh=1\ntype=rpm-md\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" \
-  | sudo tee /etc/yum.repos.d/vscode.repo > /dev/null
-sudo dnf check-update
-sudo dnf install -y code
-```
-
-**Recommended extensions for Tekt development:**
-```bash
-code --install-extension ms-python.python
-code --install-extension golang.go
-code --install-extension anthropics.claude-code
-code --install-extension dbaeumer.vscode-eslint
-code --install-extension esbenp.prettier-vscode
-```
-
-**Verify:**
-```bash
-code --version
-```
-
-**Docs:** [code.visualstudio.com](https://code.visualstudio.com) · [VS Code on Linux](https://code.visualstudio.com/docs/setup/linux)
-
 ---
 
-### 8. Claude Code
+## Tekt.Iris — Intelligence
+
+### 9. Claude Code
 
 Anthropic's agentic coding CLI. Claude Code runs inside your terminal and can read, write, and execute files, run tests, and interact with your codebase using the full Claude API. Open-sourced in March 2026.
 
@@ -478,7 +572,7 @@ claude --help                  # Full command reference
 
 ---
 
-### 9. OpenClaw
+### 10. OpenClaw
 
 OpenClaw is the primary agentic workspace runtime in the Tekt stack — an open-source personal AI assistant that orchestrates tool calls, manages MCP server connections, runs multi-step agent workflows, and connects to messaging platforms (Telegram, WhatsApp, Slack, Discord, Signal, iMessage, Matrix, and more).
 
@@ -535,7 +629,7 @@ openclaw gateway status
 
 ---
 
-### 10. PicoClaw
+### 11. PicoClaw
 
 PicoClaw is an ultra-lightweight AI assistant written in Go — a single self-contained binary that runs on resource-constrained and edge environments. Built by Sipeed, it runs on $10 hardware with <10MB RAM, supports x86_64, ARM64, and RISC-V, and boots in ~1 second. Used in the Tekt stack for background processing nodes, headless machines, and embedded instances.
 
@@ -595,7 +689,7 @@ picoclaw --version
 
 ---
 
-### 11. Hermes Agent
+### 12. Hermes Agent
 
 Hermes is a self-improving AI agent built by Nous Research — the coordination and messaging layer in the Tekt stack. It features a built-in learning loop (auto-creates skills from experience), cross-session memory, and a unified messaging gateway (Telegram, Discord, Slack, WhatsApp, Signal, Email, and more). Supports any LLM provider via OpenRouter, Nous Portal, OpenAI, Anthropic, Google, and custom endpoints.
 
@@ -664,6 +758,7 @@ hermes --version
 **Docs:** [hermes-agent.nousresearch.com/docs](https://hermes-agent.nousresearch.com/docs) · [github.com/NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent)
 
 ---
+---
 
 ## Post-Installation
 
@@ -682,13 +777,19 @@ source ~/.bashrc
 ### Verify everything is running
 
 ```bash
+# Tekt.Dev
 brew --version
 go version
 python --version
 node --version && npm --version
+code --version
+docker --version && docker compose version
+
+# Tekt.Base
 rclone version
 aws --version
-code --version
+
+# Tekt.Iris
 claude --version
 openclaw --version
 picoclaw --version
@@ -810,5 +911,6 @@ Issues and PRs welcome at [github.com/xingh/tekt.md](https://github.com/xingh/te
 
 ---
 
-*Maintained by [Anant Corporation](https://anant.us)*
+*Maintained by Rahul Singh [Anant Corporation](https://anant.us)*
+
 ---
