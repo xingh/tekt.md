@@ -72,8 +72,8 @@ arch_type() {
 require_sudo() {
   if [ "$(os_type)" = "linux" ] && [ "$EUID" -ne 0 ]; then
     if ! command_exists sudo; then
-      error "sudo is required but not available. Re-run as root."
-      exit 1
+      warn "sudo is required but not available. Skipping this step."
+      return 1
     fi
     SUDO="sudo"
   else
@@ -170,8 +170,8 @@ install_git() {
   if command_exists git; then
     success "Git $(git --version) installed"
   else
-    error "Git installation failed. Install manually and re-run."
-    exit 1
+    warn "Git installation failed. Many downstream tools depend on Git."
+    warn "Install manually: https://git-scm.com/downloads"
   fi
 }
 
@@ -650,7 +650,7 @@ install_openclaw() {
 }
 
 # =============================================================================
-# 11. PicoClaw
+# 12. PicoClaw
 # =============================================================================
 install_picoclaw() {
   section "PicoClaw"
@@ -664,10 +664,10 @@ install_picoclaw() {
   os="$(uname -s | tr '[:upper:]' '[:lower:]')"
   arch="$(arch_type)"
 
-  # Map OS names to PicoClaw release naming convention
+  # PicoClaw release binaries use: picoclaw-{os}-{arch} (hyphens, lowercase)
+  # e.g. picoclaw-linux-amd64, picoclaw-linux-arm64, picoclaw-darwin-arm64
   case "$os" in
-    darwin) os="darwin" ;;
-    linux)  os="Linux" ;;
+    darwin|linux) ;; # valid
     *)
       warn "Unsupported OS for PicoClaw binary download: $os"
       warn "Build from source: git clone ${PICOCLAW_REPO} && cd picoclaw && make deps && make install"
@@ -675,13 +675,11 @@ install_picoclaw() {
       ;;
   esac
 
-  # PicoClaw uses darwin_arm64, darwin_amd64, Linux_arm64, Linux_amd64
-  if [ "$os" = "darwin" ]; then
-    # macOS: direct binary (no tarball)
-    binary_name="picoclaw_${os}_${arch}"
-    dl_url="${PICOCLAW_REPO}/releases/latest/download/${binary_name}"
-    log "Downloading PicoClaw for ${os}/${arch}..."
-    curl -fsSL "$dl_url" -o /tmp/picoclaw
+  binary_name="picoclaw-${os}-${arch}"
+  dl_url="${PICOCLAW_REPO}/releases/latest/download/${binary_name}"
+  log "Downloading PicoClaw (${binary_name})..."
+
+  if curl -fsSL "$dl_url" -o /tmp/picoclaw 2>/dev/null; then
     chmod +x /tmp/picoclaw
     if command_exists sudo; then
       sudo mv /tmp/picoclaw /usr/local/bin/picoclaw
@@ -689,28 +687,34 @@ install_picoclaw() {
       mv /tmp/picoclaw "$HOME/.local/bin/picoclaw"
     fi
   else
-    # Linux: tarball
-    binary_name="picoclaw_${os}_${arch}.tar.gz"
-    dl_url="${PICOCLAW_REPO}/releases/latest/download/${binary_name}"
-    log "Downloading PicoClaw for ${os}/${arch}..."
-    curl -fsSL "$dl_url" -o /tmp/picoclaw.tar.gz
-    tar xzf /tmp/picoclaw.tar.gz -C /tmp/
-    if [ -n "${SUDO:-}" ] 2>/dev/null; then
-      $SUDO mv /tmp/picoclaw /usr/local/bin/picoclaw
-      $SUDO chmod +x /usr/local/bin/picoclaw
+    warn "Binary download failed (${dl_url})."
+    warn "Falling back to build from source..."
+    if command_exists go; then
+      local tmpdir; tmpdir="$(mktemp -d)"
+      git clone --depth 1 "${PICOCLAW_REPO}" "$tmpdir/picoclaw" 2>/dev/null
+      if [ -d "$tmpdir/picoclaw" ]; then
+        cd "$tmpdir/picoclaw"
+        make deps 2>/dev/null || true
+        make build 2>/dev/null
+        if [ -f build/picoclaw ]; then
+          cp build/picoclaw "$HOME/.local/bin/picoclaw"
+          chmod +x "$HOME/.local/bin/picoclaw"
+        fi
+        cd - >/dev/null
+      fi
+      rm -rf "$tmpdir"
     else
-      mv /tmp/picoclaw "$HOME/.local/bin/picoclaw"
-      chmod +x "$HOME/.local/bin/picoclaw"
+      warn "Go not available for source build. Install PicoClaw manually:"
+      warn "  git clone ${PICOCLAW_REPO} && cd picoclaw && make deps && make install"
+      return
     fi
-    rm -f /tmp/picoclaw.tar.gz
   fi
 
   if command_exists picoclaw; then
     success "PicoClaw installed — $(picoclaw --version 2>/dev/null || echo 'version unknown')"
     log "Run 'picoclaw onboard' to complete setup."
   else
-    warn "PicoClaw binary not found in PATH after install."
-    warn "Build from source: git clone ${PICOCLAW_REPO} && cd picoclaw && make deps && make install"
+    warn "PicoClaw not found in PATH after install. Continuing..."
   fi
 }
 
@@ -836,25 +840,28 @@ main() {
   # Ensure ~/.local/bin exists and is in PATH early — PicoClaw and Hermes install here
   ensure_local_bin
 
+  # Each install is wrapped with || true so a single failure doesn't kill the script.
+  # The summary at the end shows what succeeded and what didn't.
+
   # ── Tekt.Dev ──
-  install_git
-  install_homebrew
-  install_system_deps
-  install_go
-  install_python
-  install_nvm_node
-  install_vscode
-  install_docker
+  install_git           || warn "Git install failed — continuing..."
+  install_homebrew      || warn "Homebrew install failed — continuing..."
+  install_system_deps   || warn "System deps install failed — continuing..."
+  install_go            || warn "Go install failed — continuing..."
+  install_python        || warn "Python install failed — continuing..."
+  install_nvm_node      || warn "nvm/Node install failed — continuing..."
+  install_vscode        || warn "VSCode install failed — continuing..."
+  install_docker        || warn "Docker install failed — continuing..."
 
   # ── Tekt.Base ──
-  install_rclone
-  install_s3_tools
+  install_rclone        || warn "rclone install failed — continuing..."
+  install_s3_tools      || warn "S3 tools install failed — continuing..."
 
   # ── Tekt.Iris ──
-  install_claude_code
-  install_openclaw
-  install_picoclaw
-  install_hermes
+  install_claude_code   || warn "Claude Code install failed — continuing..."
+  install_openclaw      || warn "OpenClaw install failed — continuing..."
+  install_picoclaw      || warn "PicoClaw install failed — continuing..."
+  install_hermes        || warn "Hermes Agent install failed — continuing..."
 
   print_summary
 }
