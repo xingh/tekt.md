@@ -126,7 +126,57 @@ ensure_local_bin() {
 }
 
 # =============================================================================
-# 1. Homebrew
+# 1. Git
+# =============================================================================
+install_git() {
+  section "Git"
+
+  if command_exists git; then
+    success "Git already installed — $(git --version)"
+    return
+  fi
+
+  local os; os="$(os_type)"
+
+  if [ "$os" = "macos" ]; then
+    # On macOS, git comes with Xcode Command Line Tools (installed before Homebrew)
+    log "Installing Xcode Command Line Tools (includes Git)..."
+    xcode-select --install 2>/dev/null || true
+    # Wait for xcode-select to finish
+    until command_exists git; do
+      sleep 5
+    done
+  else
+    require_sudo
+    local distro; distro="$(linux_distro)"
+    case "$distro" in
+      ubuntu|debian|linuxmint|pop)
+        $SUDO apt-get update -q
+        $SUDO apt-get install -y -q git
+        ;;
+      fedora|rhel|centos|rocky|alma)
+        $SUDO dnf install -y git
+        ;;
+      arch|manjaro)
+        $SUDO pacman -S --noconfirm git
+        ;;
+      *)
+        warn "Unknown distro ($distro) — install git manually."
+        return
+        ;;
+    esac
+  fi
+
+  if command_exists git; then
+    success "Git $(git --version) installed"
+  else
+    error "Git installation failed. Install manually and re-run."
+    exit 1
+  fi
+}
+
+# =============================================================================
+# 2. Homebrew
 # =============================================================================
 install_homebrew() {
   section "Homebrew"
@@ -157,7 +207,7 @@ install_homebrew() {
 }
 
 # =============================================================================
-# 2. System dependencies (Linux only)
+# System dependencies (Linux only)
 # =============================================================================
 install_system_deps() {
   [ "$(os_type)" = "linux" ] || return 0
@@ -721,6 +771,7 @@ print_summary() {
       local ver
       case "$cmd" in
         brew)    ver="$(brew --version | head -1)" ;;
+        git)     ver="$(git --version)" ;;
         go)      ver="$(go version | awk '{print $3}')" ;;
         python3) ver="$(python3 --version)" ;;
         node)    ver="$(node --version)" ;;
@@ -739,6 +790,7 @@ print_summary() {
   }
 
   # ── Tekt.Dev ──
+  check "Git"             git
   check "Homebrew"        brew
   check "Go"              go
   check "Python"          python3
@@ -785,6 +837,7 @@ main() {
   ensure_local_bin
 
   # ── Tekt.Dev ──
+  install_git
   install_homebrew
   install_system_deps
   install_go
