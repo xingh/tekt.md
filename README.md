@@ -3,6 +3,7 @@ layout: layout.njk
 title: tekt.md — Tekt Bootstrap
 permalink: /index.html
 ---
+
 # Tekt Bootstrap — Installation Guide
 
 Set up a complete Tekt development environment in a single script. Covers every tool in the Tekt stack — from the platform runtime layer up through native AI agents.
@@ -819,27 +820,26 @@ source ~/.zshrc
 source ~/.bashrc
 ```
 
-### Verify everything is running
+### Check what's installed
+
+Run `status` to see a full report of which Tekt tools are installed and which are missing:
 
 ```bash
-# Tekt.Dev
-git --version
-brew --version
-go version
-python --version
-node --version && npm --version
-code --version
-docker --version && docker compose version
+bash install.sh status
+```
 
-# Tekt.Base
-rclone version
-aws --version
+This shows every tool across Tekt.Dev, Tekt.Base, and Tekt.Iris with version info for installed tools and a count of what's missing. When this eventually becomes the `tekt` CLI, the same command will be:
 
-# Tekt.Iris
-claude --version
-openclaw --version
-picoclaw --version
-hermes doctor
+```bash
+tekt status
+```
+
+### Usage
+
+```bash
+bash install.sh            # Install all Tekt tools
+bash install.sh status     # Check which tools are installed
+bash install.sh help       # Show available commands
 ```
 
 ### Configure your Tekt workspace
