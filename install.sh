@@ -83,18 +83,21 @@ require_sudo() {
 
 # ── Environment reload helper ─────────────────────────────────────────────────
 reload_path() {
-  # Re-source common shell profile snippets so subsequent commands see new bins
+  # Temporarily disable strict mode — sourced profiles often have unset vars and non-zero returns
+  set +euo pipefail 2>/dev/null
   for f in "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.zshrc" "$HOME/.profile"; do
-    [ -f "$f" ] && source "$f" 2>/dev/null || true
+    [ -f "$f" ] && source "$f" 2>/dev/null
   done
+  set -euo pipefail
+
   export PATH="$HOME/.local/bin:$HOME/go/bin:/usr/local/go/bin:$PATH"
   # Homebrew
   if [ -f "/opt/homebrew/bin/brew" ]; then
-    eval "$(/opt/homebrew/bin/brew shellenv)"
+    eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
   elif [ -f "/usr/local/bin/brew" ]; then
-    eval "$(/usr/local/bin/brew shellenv)"
+    eval "$(/usr/local/bin/brew shellenv)" 2>/dev/null || true
   elif [ -f "/home/linuxbrew/.linuxbrew/bin/brew" ]; then
-    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)" 2>/dev/null || true
   fi
   # pyenv
   export PYENV_ROOT="${PYENV_ROOT:-$HOME/.pyenv}"
@@ -102,7 +105,7 @@ reload_path() {
   command_exists pyenv && eval "$(pyenv init -)" 2>/dev/null || true
   # nvm
   export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
-  [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
+  [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh" 2>/dev/null || true
   # npm global bin (OpenClaw, other global npm packages)
   if command_exists npm; then
     local npm_bin; npm_bin="$(npm prefix -g 2>/dev/null)/bin"
@@ -820,7 +823,109 @@ print_summary() {
 }
 
 # =============================================================================
-# Main
+# Status — standalone environment check (bash install.sh status / tekt status)
+# =============================================================================
+tekt_status() {
+  reload_path
+
+  echo ""
+  echo -e "${BOLD}${CYAN}"
+  echo "  ████████╗███████╗██╗  ██╗████████╗"
+  echo "     ██╔══╝██╔════╝██║ ██╔╝╚══██╔══╝"
+  echo "     ██║   █████╗  █████╔╝    ██║   "
+  echo "     ██║   ██╔══╝  ██╔═██╗    ██║   "
+  echo "     ██║   ███████╗██║  ██╗   ██║   "
+  echo "     ╚═╝   ╚══════╝╚═╝  ╚═╝   ╚═╝   "
+  echo -e "${RESET}"
+  echo -e "  ${BOLD}Tekt Environment Status${RESET}  —  https://tekt.md"
+  echo ""
+  log "OS: $(uname -s) / Arch: $(arch_type)"
+  echo ""
+
+  local installed=0 missing=0
+  local missing_list=""
+
+  check_tool() {
+    local label="$1" cmd="$2" category="$3"
+    if command_exists "$cmd"; then
+      local ver
+      case "$cmd" in
+        brew)    ver="$(brew --version | head -1)" ;;
+        git)     ver="$(git --version)" ;;
+        go)      ver="$(go version | awk '{print $3}')" ;;
+        python3) ver="$(python3 --version)" ;;
+        node)    ver="$(node --version)" ;;
+        npm)     ver="$(npm --version)" ;;
+        rclone)  ver="$(rclone version | head -1 | awk '{print $2}')" ;;
+        aws)     ver="$(aws --version | awk '{print $1}')" ;;
+        code)    ver="$(code --version | head -1)" ;;
+        docker)  ver="$(docker --version 2>/dev/null)" ;;
+        claude)  ver="$(claude --version 2>/dev/null || echo 'installed')" ;;
+        *)       ver="$(${cmd} --version 2>/dev/null || echo 'installed')" ;;
+      esac
+      printf "  ${GREEN}✓${RESET}  %-18s %s\n" "$label" "$ver"
+      installed=$((installed + 1))
+    else
+      printf "  ${RED}✗${RESET}  %-18s %s\n" "$label" "not installed"
+      missing=$((missing + 1))
+      missing_list="${missing_list}  • ${label}\n"
+    fi
+  }
+
+  echo -e "${BOLD}Tekt.Dev — Development Environment${RESET}"
+  check_tool "Git"             git       dev
+  check_tool "Homebrew"        brew      dev
+  check_tool "Go"              go        dev
+  check_tool "Python"          python3   dev
+  check_tool "Node.js"         node      dev
+  check_tool "npm"             npm       dev
+  check_tool "VSCode"          code      dev
+  check_tool "Docker"          docker    dev
+  if command_exists docker && docker compose version &>/dev/null; then
+    printf "  ${GREEN}✓${RESET}  %-18s %s\n" "Docker Compose" "$(docker compose version 2>/dev/null)"
+  elif command_exists docker; then
+    printf "  ${YELLOW}?${RESET}  %-18s %s\n" "Docker Compose" "plugin not found"
+  fi
+
+  echo ""
+  echo -e "${BOLD}Tekt.Base — Communications & Sync${RESET}"
+  check_tool "rclone"          rclone    base
+  check_tool "aws-cli"         aws       base
+  check_tool "s3cmd"           s3cmd     base
+  check_tool "s5cmd"           s5cmd     base
+
+  echo ""
+  echo -e "${BOLD}Tekt.Iris — Intelligence${RESET}"
+  check_tool "Claude Code"     claude    iris
+  check_tool "OpenClaw"        openclaw  iris
+  check_tool "PicoClaw"        picoclaw  iris
+  check_tool "Hermes Agent"    hermes    iris
+
+  # ── Totals ──
+  local total=$((installed + missing))
+  echo ""
+  echo -e "  ─────────────────────────────────"
+  printf "  ${GREEN}${BOLD}%d${RESET} installed  /  " "$installed"
+  if [ "$missing" -gt 0 ]; then
+    printf "${RED}${BOLD}%d${RESET} missing  /  %d total\n" "$missing" "$total"
+  else
+    printf "${GREEN}${BOLD}0${RESET} missing  /  %d total\n" "$total"
+  fi
+
+  if [ "$missing" -gt 0 ]; then
+    echo ""
+    echo -e "  ${YELLOW}Missing:${RESET}"
+    echo -e "$missing_list"
+    log "Run 'bash install.sh' to install everything, or install individually."
+  else
+    echo ""
+    success "All Tekt tools are installed."
+  fi
+  echo ""
+}
+
+# =============================================================================
+# Main — full install
 # =============================================================================
 main() {
   echo ""
@@ -866,4 +971,27 @@ main() {
   print_summary
 }
 
-main "$@"
+# =============================================================================
+# Entry point — subcommand dispatch
+# =============================================================================
+case "${1:-}" in
+  status)
+    tekt_status
+    ;;
+  help|--help|-h)
+    echo "Usage: $(basename "$0") [command]"
+    echo ""
+    echo "Commands:"
+    echo "  (none)     Install all Tekt tools"
+    echo "  status     Check which tools are installed"
+    echo "  help       Show this help"
+    echo ""
+    ;;
+  "")
+    main
+    ;;
+  *)
+    error "Unknown command: $1"
+    echo "Run '$(basename "$0") help' for usage."
+    ;;
+esac
