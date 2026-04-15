@@ -683,22 +683,24 @@ Visit [picoclaw.io](https://picoclaw.io) for one-click download.
 
 **Install — pre-built binary (macOS arm64):**
 ```bash
-curl -L https://github.com/sipeed/picoclaw/releases/latest/download/picoclaw_darwin_arm64 \
+curl -L https://github.com/sipeed/picoclaw/releases/latest/download/picoclaw-darwin-arm64 \
   -o /usr/local/bin/picoclaw
 chmod +x /usr/local/bin/picoclaw
 ```
 
 **Install — pre-built binary (Linux amd64):**
 ```bash
-wget https://github.com/sipeed/picoclaw/releases/latest/download/picoclaw_Linux_amd64.tar.gz
-tar xzf picoclaw_Linux_amd64.tar.gz
+curl -L https://github.com/sipeed/picoclaw/releases/latest/download/picoclaw-linux-amd64 \
+  -o picoclaw
+chmod +x picoclaw
 sudo mv picoclaw /usr/local/bin/
 ```
 
 **Install — pre-built binary (Linux arm64):**
 ```bash
-wget https://github.com/sipeed/picoclaw/releases/latest/download/picoclaw_Linux_arm64.tar.gz
-tar xzf picoclaw_Linux_arm64.tar.gz
+curl -L https://github.com/sipeed/picoclaw/releases/latest/download/picoclaw-linux-arm64 \
+  -o picoclaw
+chmod +x picoclaw
 sudo mv picoclaw /usr/local/bin/
 ```
 
