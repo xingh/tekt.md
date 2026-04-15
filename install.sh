@@ -271,7 +271,7 @@ install_python() {
 }
 
 # =============================================================================
-# 5. nvm + Node.js + npm
+# 4. nvm + Node.js + npm
 # =============================================================================
 install_nvm_node() {
   section "nvm $NVM_VERSION + Node.js $NODE_VERSION LTS"
@@ -309,7 +309,7 @@ install_nvm_node() {
 }
 
 # =============================================================================
-# 6. rclone
+# 7. rclone
 # =============================================================================
 install_rclone() {
   section "rclone"
@@ -327,7 +327,7 @@ install_rclone() {
 }
 
 # =============================================================================
-# 7. AWS CLI + s3 utilities
+# 8. AWS CLI + s3 utilities
 # =============================================================================
 install_s3_tools() {
   section "AWS CLI + s3 utilities"
@@ -385,7 +385,7 @@ install_s3_tools() {
 }
 
 # =============================================================================
-# 8. Visual Studio Code
+# 5. Visual Studio Code
 # =============================================================================
 install_vscode() {
   section "Visual Studio Code"
@@ -447,6 +447,68 @@ EOF
   fi
 
   success "VSCode installed"
+}
+
+# =============================================================================
+# 6. Docker & Docker Compose
+# =============================================================================
+install_docker() {
+  section "Docker & Docker Compose"
+
+  if command_exists docker; then
+    success "Docker already installed — $(docker --version)"
+    # Also check for compose
+    if docker compose version &>/dev/null; then
+      success "Docker Compose already installed — $(docker compose version 2>/dev/null)"
+    else
+      log "Docker found but Docker Compose plugin missing. Installing..."
+    fi
+    return
+  fi
+
+  local os; os="$(os_type)"
+
+  if [ "$os" = "macos" ]; then
+    if command_exists brew; then
+      log "Installing Docker Desktop via Homebrew..."
+      brew install --cask docker --quiet
+      success "Docker Desktop installed — launch from Applications to start the daemon."
+    else
+      warn "Install Docker Desktop manually from https://docker.com/products/docker-desktop"
+    fi
+    return
+  fi
+
+  # Linux — use the convenience script from get.docker.com
+  require_sudo
+  log "Installing Docker Engine via get.docker.com..."
+  curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+  $SUDO sh /tmp/get-docker.sh
+  rm -f /tmp/get-docker.sh
+
+  # Enable and start Docker
+  $SUDO systemctl enable docker.service 2>/dev/null || true
+  $SUDO systemctl enable containerd.service 2>/dev/null || true
+  $SUDO systemctl start docker 2>/dev/null || true
+
+  # Add current user to docker group (takes effect on next login)
+  if [ -n "${SUDO_USER:-}" ]; then
+    $SUDO usermod -aG docker "$SUDO_USER"
+    log "Added $SUDO_USER to docker group (log out and back in to apply)."
+  elif [ "$EUID" -ne 0 ]; then
+    $SUDO usermod -aG docker "$USER"
+    log "Added $USER to docker group (log out and back in to apply)."
+  fi
+
+  # Verify
+  if command_exists docker; then
+    success "Docker $(docker --version) installed"
+    if docker compose version &>/dev/null; then
+      success "Docker Compose $(docker compose version 2>/dev/null) installed"
+    fi
+  else
+    warn "Docker installed but not in PATH. Restart your shell."
+  fi
 }
 
 # =============================================================================
@@ -666,6 +728,7 @@ print_summary() {
         rclone)  ver="$(rclone version | head -1 | awk '{print $2}')" ;;
         aws)     ver="$(aws --version | awk '{print $1}')" ;;
         code)    ver="$(code --version | head -1)" ;;
+        docker)  ver="$(docker --version 2>/dev/null)$(docker compose version 2>/dev/null && echo ' + Compose')" ;;
         claude)  ver="$(claude --version 2>/dev/null || echo 'installed')" ;;
         *)       ver="installed" ;;
       esac
@@ -675,20 +738,24 @@ print_summary() {
     fi
   }
 
-  check "Homebrew"      brew
-  check "Go"            go
-  check "Python"        python3
-  check "Node.js"       node
-  check "npm"           npm
-  check "rclone"        rclone
-  check "aws-cli"       aws
-  check "s3cmd"         s3cmd
-  check "s5cmd"         s5cmd
-  check "VSCode"        code
-  check "Claude Code"   claude
-  check "OpenClaw"      openclaw
-  check "PicoClaw"      picoclaw
-  check "Hermes Agent"  hermes
+  # ── Tekt.Dev ──
+  check "Homebrew"        brew
+  check "Go"              go
+  check "Python"          python3
+  check "Node.js"         node
+  check "npm"             npm
+  check "VSCode"          code
+  check "Docker"          docker
+  # ── Tekt.Base ──
+  check "rclone"          rclone
+  check "aws-cli"         aws
+  check "s3cmd"           s3cmd
+  check "s5cmd"           s5cmd
+  # ── Tekt.Iris ──
+  check "Claude Code"     claude
+  check "OpenClaw"        openclaw
+  check "PicoClaw"        picoclaw
+  check "Hermes Agent"    hermes
 
   echo ""
   log "Restart your terminal (or run: source ~/.zshrc) to reload PATH."
@@ -717,14 +784,20 @@ main() {
   # Ensure ~/.local/bin exists and is in PATH early — PicoClaw and Hermes install here
   ensure_local_bin
 
+  # ── Tekt.Dev ──
   install_homebrew
   install_system_deps
   install_go
   install_python
   install_nvm_node
+  install_vscode
+  install_docker
+
+  # ── Tekt.Base ──
   install_rclone
   install_s3_tools
-  install_vscode
+
+  # ── Tekt.Iris ──
   install_claude_code
   install_openclaw
   install_picoclaw
