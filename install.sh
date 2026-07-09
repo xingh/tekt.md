@@ -31,16 +31,15 @@ error()   { echo -e "${RED}[✗]${RESET} $*" >&2; }
 section() { echo -e "\n${BOLD}${BLUE}══ $* ══${RESET}"; }
 
 # ── Version targets (edit here to pin versions) ───────────────────────────────
-GO_VERSION="1.22.4"
-PYTHON_VERSION="3.12.4"
-NODE_VERSION="20"          # LTS major; nvm installs latest patch
-NVM_VERSION="0.40.1"
+GO_VERSION="1.26.2"
+PYTHON_VERSION="3.14"
+NODE_VERSION="24"          # Active LTS (Krypton)
+NVM_VERSION="0.40.4"
 
 # ── Repo / binary sources for Tekt-native tools ───────────────────────────────
-# TODO: Replace these with final release URLs once published
-OPENCLAW_REPO="https://github.com/anantcorp/openclaw"
-PICOCLAW_REPO="https://github.com/anantcorp/picoclaw"
-HERMES_REPO="https://github.com/anantcorp/hermes-agent"
+OPENCLAW_REPO="https://github.com/openclaw/openclaw"
+PICOCLAW_REPO="https://github.com/sipeed/picoclaw"
+HERMES_REPO="https://github.com/NousResearch/hermes-agent"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 command_exists() { command -v "$1" &>/dev/null; }
@@ -73,8 +72,8 @@ arch_type() {
 require_sudo() {
   if [ "$(os_type)" = "linux" ] && [ "$EUID" -ne 0 ]; then
     if ! command_exists sudo; then
-      error "sudo is required but not available. Re-run as root."
-      exit 1
+      warn "sudo is required but not available. Skipping this step."
+      return 1
     fi
     SUDO="sudo"
   else
@@ -84,22 +83,34 @@ require_sudo() {
 
 # ── Environment reload helper ─────────────────────────────────────────────────
 reload_path() {
-  # Re-source common shell profile snippets so subsequent commands see new bins
+  # Temporarily disable strict mode — sourced profiles often have unset vars and non-zero returns
+  set +euo pipefail 2>/dev/null
   for f in "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.zshrc" "$HOME/.profile"; do
-    [ -f "$f" ] && source "$f" 2>/dev/null || true
+    [ -f "$f" ] && source "$f" 2>/dev/null
   done
+  set -euo pipefail
+
   export PATH="$HOME/.local/bin:$HOME/go/bin:/usr/local/go/bin:$PATH"
   # Homebrew
   if [ -f "/opt/homebrew/bin/brew" ]; then
-    eval "$(/opt/homebrew/bin/brew shellenv)"
+    eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
   elif [ -f "/usr/local/bin/brew" ]; then
-    eval "$(/usr/local/bin/brew shellenv)"
+    eval "$(/usr/local/bin/brew shellenv)" 2>/dev/null || true
   elif [ -f "/home/linuxbrew/.linuxbrew/bin/brew" ]; then
-    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)" 2>/dev/null || true
   fi
+  # pyenv
+  export PYENV_ROOT="${PYENV_ROOT:-$HOME/.pyenv}"
+  [[ -d "$PYENV_ROOT/bin" ]] && export PATH="$PYENV_ROOT/bin:$PATH"
+  command_exists pyenv && eval "$(pyenv init -)" 2>/dev/null || true
   # nvm
   export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
-  [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
+  [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh" 2>/dev/null || true
+  # npm global bin (OpenClaw, other global npm packages)
+  if command_exists npm; then
+    local npm_bin; npm_bin="$(npm prefix -g 2>/dev/null)/bin"
+    [[ -d "$npm_bin" ]] && export PATH="$npm_bin:$PATH"
+  fi
 }
 
 append_to_shell_profile() {
@@ -109,8 +120,66 @@ append_to_shell_profile() {
   done
 }
 
+# ── Ensure ~/.local/bin exists and is in PATH ─────────────────────────────────
+# Called early in main() — PicoClaw (no-sudo fallback) and Hermes both install here
+ensure_local_bin() {
+  mkdir -p "$HOME/.local/bin"
+  append_to_shell_profile 'export PATH="$HOME/.local/bin:$PATH"'
+  export PATH="$HOME/.local/bin:$PATH"
+}
+
 # =============================================================================
-# 1. Homebrew
+# 1. Git
+# =============================================================================
+install_git() {
+  section "Git"
+
+  if command_exists git; then
+    success "Git already installed — $(git --version)"
+    return
+  fi
+
+  local os; os="$(os_type)"
+
+  if [ "$os" = "macos" ]; then
+    # On macOS, git comes with Xcode Command Line Tools (installed before Homebrew)
+    log "Installing Xcode Command Line Tools (includes Git)..."
+    xcode-select --install 2>/dev/null || true
+    # Wait for xcode-select to finish
+    until command_exists git; do
+      sleep 5
+    done
+  else
+    require_sudo
+    local distro; distro="$(linux_distro)"
+    case "$distro" in
+      ubuntu|debian|linuxmint|pop)
+        $SUDO apt-get update -q
+        $SUDO apt-get install -y -q git
+        ;;
+      fedora|rhel|centos|rocky|alma)
+        $SUDO dnf install -y git
+        ;;
+      arch|manjaro)
+        $SUDO pacman -S --noconfirm git
+        ;;
+      *)
+        warn "Unknown distro ($distro) — install git manually."
+        return
+        ;;
+    esac
+  fi
+
+  if command_exists git; then
+    success "Git $(git --version) installed"
+  else
+    warn "Git installation failed. Many downstream tools depend on Git."
+    warn "Install manually: https://git-scm.com/downloads"
+  fi
+}
+
+# =============================================================================
+# 2. Homebrew
 # =============================================================================
 install_homebrew() {
   section "Homebrew"
@@ -141,7 +210,7 @@ install_homebrew() {
 }
 
 # =============================================================================
-# 2. System dependencies (Linux only)
+# System dependencies (Linux only)
 # =============================================================================
 install_system_deps() {
   [ "$(os_type)" = "linux" ] || return 0
@@ -154,17 +223,20 @@ install_system_deps() {
     ubuntu|debian|linuxmint|pop)
       $SUDO apt-get update -q
       $SUDO apt-get install -y -q \
-        build-essential curl wget git unzip zip tar \
+        make build-essential curl wget git unzip zip tar \
         libssl-dev libffi-dev zlib1g-dev libbz2-dev \
-        libreadline-dev libsqlite3-dev liblzma-dev \
-        xz-utils ca-certificates gnupg
+        libreadline-dev libsqlite3-dev libncursesw5-dev \
+        xz-utils tk-dev libxml2-dev libxmlsec1-dev \
+        liblzma-dev ca-certificates gnupg
       ;;
     fedora|rhel|centos|rocky|alma)
       $SUDO dnf groupinstall -y "Development Tools"
       $SUDO dnf install -y \
-        curl wget git unzip zip tar \
-        openssl-devel libffi-devel zlib-devel bzip2-devel \
-        readline-devel sqlite-devel xz-devel ca-certificates gnupg2
+        make gcc patch curl wget git unzip zip tar \
+        openssl-devel libffi-devel zlib-devel bzip2 bzip2-devel \
+        readline-devel sqlite sqlite-devel tk-devel \
+        xz-devel libuuid-devel gdbm-libs libnsl2 \
+        ca-certificates gnupg2
       ;;
     arch|manjaro)
       $SUDO pacman -Syu --noconfirm base-devel curl wget git unzip openssl
@@ -194,7 +266,7 @@ install_go() {
   tarball="go${GO_VERSION}.${os}-${arch}.tar.gz"
   dl_url="https://go.dev/dl/${tarball}"
 
-  log "Downloading $tarball..."
+  log "Downloading $tarball from go.dev..."
   curl -fsSL "$dl_url" -o "/tmp/$tarball"
   require_sudo
   $SUDO rm -rf /usr/local/go
@@ -215,9 +287,20 @@ install_python() {
   if ! command_exists pyenv; then
     log "Installing pyenv..."
     curl -fsSL https://pyenv.run | bash
+
+    # Shell configuration per official pyenv docs
     append_to_shell_profile 'export PYENV_ROOT="$HOME/.pyenv"'
-    append_to_shell_profile 'export PATH="$PYENV_ROOT/bin:$PATH"'
-    append_to_shell_profile 'eval "$(pyenv init -)"'
+    append_to_shell_profile '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"'
+
+    # Detect current shell for correct init command
+    local current_shell
+    current_shell="$(basename "$SHELL")"
+    if [ "$current_shell" = "zsh" ]; then
+      append_to_shell_profile 'eval "$(pyenv init - zsh)"'
+    else
+      append_to_shell_profile 'eval "$(pyenv init - bash)"'
+    fi
+
     export PYENV_ROOT="$HOME/.pyenv"
     export PATH="$PYENV_ROOT/bin:$PATH"
     eval "$(pyenv init -)"
@@ -225,7 +308,8 @@ install_python() {
     success "pyenv already installed — $(pyenv --version)"
   fi
 
-  if pyenv versions --bare | grep -qx "$PYTHON_VERSION"; then
+  # Check if the target major.minor is already installed
+  if pyenv versions --bare | grep -q "^${PYTHON_VERSION}"; then
     success "Python $PYTHON_VERSION already available via pyenv"
   else
     log "Building Python $PYTHON_VERSION (this may take a few minutes)..."
@@ -240,17 +324,20 @@ install_python() {
 }
 
 # =============================================================================
-# 5. nvm + Node.js + npm
+# 4. nvm + Node.js + npm
 # =============================================================================
 install_nvm_node() {
-  section "nvm + Node.js $NODE_VERSION LTS"
+  section "nvm $NVM_VERSION + Node.js $NODE_VERSION LTS"
 
   export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
 
   if [ ! -s "$NVM_DIR/nvm.sh" ]; then
     log "Installing nvm $NVM_VERSION..."
     curl -o- "https://raw.githubusercontent.com/nvm-sh/nvm/v${NVM_VERSION}/install.sh" | bash
-    append_to_shell_profile 'export NVM_DIR="$HOME/.nvm"'
+
+    # nvm's install script auto-appends to shell profiles, but ensure the
+    # XDG-aware snippet from the official docs is present
+    append_to_shell_profile 'export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"'
     append_to_shell_profile '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"'
     append_to_shell_profile '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"'
   else
@@ -275,7 +362,7 @@ install_nvm_node() {
 }
 
 # =============================================================================
-# 6. rclone
+# 7. rclone
 # =============================================================================
 install_rclone() {
   section "rclone"
@@ -284,14 +371,16 @@ install_rclone() {
     return
   fi
 
-  log "Installing rclone..."
-  curl -fsSL https://rclone.org/install.sh | bash
+  log "Installing rclone from rclone.org..."
+  require_sudo
+  $SUDO -v
+  curl https://rclone.org/install.sh | $SUDO bash
 
   success "rclone $(rclone version | head -1 | awk '{print $2}') installed"
 }
 
 # =============================================================================
-# 7. AWS CLI + s3 utilities
+# 8. AWS CLI + s3 utilities
 # =============================================================================
 install_s3_tools() {
   section "AWS CLI + s3 utilities"
@@ -303,14 +392,13 @@ install_s3_tools() {
   else
     log "Installing AWS CLI v2..."
     local os arch tmpdir
-    os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+    os="$(os_type)"
     arch="$(arch_type)"
     tmpdir="$(mktemp -d)"
 
-    if [ "$os" = "darwin" ]; then
-      local pkg="AWSCLIV2.pkg"
-      curl -fsSL "https://awscli.amazonaws.com/${pkg}" -o "$tmpdir/$pkg"
-      $SUDO installer -pkg "$tmpdir/$pkg" -target /
+    if [ "$os" = "macos" ]; then
+      curl -fsSL "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "$tmpdir/AWSCLIV2.pkg"
+      $SUDO installer -pkg "$tmpdir/AWSCLIV2.pkg" -target /
     else
       local zip_name
       if [ "$arch" = "arm64" ]; then
@@ -330,7 +418,7 @@ install_s3_tools() {
   if command_exists s3cmd; then
     success "s3cmd already installed"
   else
-    log "Installing s3cmd..."
+    log "Installing s3cmd via pip..."
     pip install s3cmd --quiet
     success "s3cmd installed"
   fi
@@ -343,14 +431,14 @@ install_s3_tools() {
     if command_exists brew; then
       brew install peak/tap/s5cmd --quiet
     else
-      go install github.com/peak/s5cmd/v2@latest
+      go install github.com/peak/s5cmd/v2@v2.3.0
     fi
     success "s5cmd installed"
   fi
 }
 
 # =============================================================================
-# 8. Visual Studio Code
+# 5. Visual Studio Code
 # =============================================================================
 install_vscode() {
   section "Visual Studio Code"
@@ -375,19 +463,33 @@ install_vscode() {
     case "$distro" in
       ubuntu|debian|linuxmint|pop)
         require_sudo
+        # Import GPG key (per official VS Code docs)
+        $SUDO apt-get install -y -q wget gpg
         wget -qO- https://packages.microsoft.com/keys/microsoft.asc \
-          | gpg --dearmor \
-          | $SUDO tee /usr/share/keyrings/packages.microsoft.gpg > /dev/null
-        echo "deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/packages.microsoft.gpg] \
-          https://packages.microsoft.com/repos/code stable main" \
-          | $SUDO tee /etc/apt/sources.list.d/vscode.list > /dev/null
+          | gpg --dearmor > /tmp/microsoft.gpg
+        $SUDO install -D -o root -g root -m 644 /tmp/microsoft.gpg \
+          /usr/share/keyrings/microsoft.gpg
+        rm -f /tmp/microsoft.gpg
+
+        # DEB822 .sources format (current method per VS Code docs)
+        cat << 'EOF' | $SUDO tee /etc/apt/sources.list.d/vscode.sources > /dev/null
+Types: deb
+URIs: https://packages.microsoft.com/repos/code
+Suites: stable
+Components: main
+Architectures: amd64,arm64,armhf
+Signed-By: /usr/share/keyrings/microsoft.gpg
+EOF
+        $SUDO apt-get install -y -q apt-transport-https
         $SUDO apt-get update -q
         $SUDO apt-get install -y -q code
         ;;
       fedora|rhel|centos|rocky|alma)
         require_sudo
         $SUDO rpm --import https://packages.microsoft.com/keys/microsoft.asc
-        $SUDO sh -c 'echo -e "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/vscode.repo'
+        echo -e "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\nautorefresh=1\ntype=rpm-md\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" \
+          | $SUDO tee /etc/yum.repos.d/vscode.repo > /dev/null
+        $SUDO dnf check-update || true
         $SUDO dnf install -y code
         ;;
       *)
@@ -401,24 +503,99 @@ install_vscode() {
 }
 
 # =============================================================================
+# 6. Docker & Docker Compose
+# =============================================================================
+install_docker() {
+  section "Docker & Docker Compose"
+
+  if command_exists docker; then
+    success "Docker already installed — $(docker --version)"
+    # Also check for compose
+    if docker compose version &>/dev/null; then
+      success "Docker Compose already installed — $(docker compose version 2>/dev/null)"
+    else
+      log "Docker found but Docker Compose plugin missing. Installing..."
+    fi
+    return
+  fi
+
+  local os; os="$(os_type)"
+
+  if [ "$os" = "macos" ]; then
+    if command_exists brew; then
+      log "Installing Docker Desktop via Homebrew..."
+      brew install --cask docker --quiet
+      success "Docker Desktop installed — launch from Applications to start the daemon."
+    else
+      warn "Install Docker Desktop manually from https://docker.com/products/docker-desktop"
+    fi
+    return
+  fi
+
+  # Linux — use the convenience script from get.docker.com
+  require_sudo
+  log "Installing Docker Engine via get.docker.com..."
+  curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+  $SUDO sh /tmp/get-docker.sh
+  rm -f /tmp/get-docker.sh
+
+  # Enable and start Docker
+  $SUDO systemctl enable docker.service 2>/dev/null || true
+  $SUDO systemctl enable containerd.service 2>/dev/null || true
+  $SUDO systemctl start docker 2>/dev/null || true
+
+  # Add current user to docker group (takes effect on next login)
+  if [ -n "${SUDO_USER:-}" ]; then
+    $SUDO usermod -aG docker "$SUDO_USER"
+    log "Added $SUDO_USER to docker group (log out and back in to apply)."
+  elif [ "$EUID" -ne 0 ]; then
+    $SUDO usermod -aG docker "$USER"
+    log "Added $USER to docker group (log out and back in to apply)."
+  fi
+
+  # Verify
+  if command_exists docker; then
+    success "Docker $(docker --version) installed"
+    if docker compose version &>/dev/null; then
+      success "Docker Compose $(docker compose version 2>/dev/null) installed"
+    fi
+  else
+    warn "Docker installed but not in PATH. Restart your shell."
+  fi
+}
+
+# =============================================================================
 # 9. Claude Code
 # =============================================================================
 install_claude_code() {
   section "Claude Code"
-
-  # Ensure nvm / node is loaded
-  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
-  [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
 
   if command_exists claude; then
     success "Claude Code already installed — $(claude --version 2>/dev/null || echo 'version unknown')"
     return
   fi
 
-  log "Installing Claude Code via npm..."
-  npm install -g @anthropic-ai/claude-code
+  # Prefer native installer (recommended by Anthropic, no Node.js dependency)
+  log "Installing Claude Code via native installer..."
+  if curl -fsSL https://claude.ai/install.sh -o /tmp/claude-install.sh 2>/dev/null; then
+    bash /tmp/claude-install.sh
+    rm -f /tmp/claude-install.sh
+    success "Claude Code installed (native)"
+  else
+    # Fallback to npm if native installer unavailable
+    warn "Native installer not reachable. Falling back to npm..."
+    export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+    [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
 
-  success "Claude Code installed — $(claude --version 2>/dev/null || echo 'run: claude')"
+    if command_exists npm; then
+      npm install -g @anthropic-ai/claude-code
+      success "Claude Code installed (npm)"
+    else
+      error "Neither native installer nor npm available. Install Claude Code manually."
+      error "  Native:  curl -fsSL https://claude.ai/install.sh | bash"
+      error "  npm:     npm install -g @anthropic-ai/claude-code"
+    fi
+  fi
 }
 
 # =============================================================================
@@ -432,24 +609,51 @@ install_openclaw() {
     return
   fi
 
-  # ── Option A: npm package (uncomment when published) ────────────────────────
-  # npm install -g @anantcorp/openclaw
+  # Ensure nvm / node is loaded
+  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
 
-  # ── Option B: install script from release (active path) ─────────────────────
-  log "Installing OpenClaw from $OPENCLAW_REPO ..."
-  if curl -fsSL "${OPENCLAW_REPO}/releases/latest/download/install.sh" -o /tmp/openclaw-install.sh 2>/dev/null; then
+  # Prefer the official install script (handles platform detection)
+  log "Installing OpenClaw..."
+  if curl -fsSL https://openclaw.ai/install.sh -o /tmp/openclaw-install.sh 2>/dev/null; then
     bash /tmp/openclaw-install.sh
     rm -f /tmp/openclaw-install.sh
-    success "OpenClaw installed"
+    success "OpenClaw installed (script)"
+  elif command_exists npm; then
+    # Fallback: npm global install
+    log "Install script not reachable — falling back to npm..."
+    npm install -g openclaw@latest
+    success "OpenClaw installed (npm)"
   else
-    warn "OpenClaw install script not reachable at ${OPENCLAW_REPO}."
-    warn "Clone manually:"
-    warn "  git clone ${OPENCLAW_REPO} && cd openclaw && npm install && npm link"
+    error "Could not install OpenClaw. Install manually:"
+    error "  npm install -g openclaw@latest"
+    error "  — or —"
+    error "  curl -fsSL https://openclaw.ai/install.sh | bash"
+    return
+  fi
+
+  if command_exists openclaw; then
+    log "Run 'openclaw onboard --install-daemon' to complete setup."
+  else
+    # npm global bin may not be in PATH — add it
+    if command_exists npm; then
+      local npm_bin; npm_bin="$(npm prefix -g 2>/dev/null)/bin"
+      if [[ -d "$npm_bin" ]]; then
+        export PATH="$npm_bin:$PATH"
+        append_to_shell_profile "export PATH=\"$(npm prefix -g)/bin:\$PATH\""
+        log "Added npm global bin ($npm_bin) to shell profile."
+      fi
+    fi
+    if command_exists openclaw; then
+      log "Run 'openclaw onboard --install-daemon' to complete setup."
+    else
+      warn "openclaw not found in PATH after install. Restart your shell or run: source ~/.bashrc"
+    fi
   fi
 }
 
 # =============================================================================
-# 11. PicoClaw
+# 12. PicoClaw
 # =============================================================================
 install_picoclaw() {
   section "PicoClaw"
@@ -459,15 +663,61 @@ install_picoclaw() {
     return
   fi
 
-  log "Installing PicoClaw from $PICOCLAW_REPO ..."
-  if curl -fsSL "${PICOCLAW_REPO}/releases/latest/download/install.sh" -o /tmp/picoclaw-install.sh 2>/dev/null; then
-    bash /tmp/picoclaw-install.sh
-    rm -f /tmp/picoclaw-install.sh
-    success "PicoClaw installed"
+  local os arch binary_name dl_url
+  os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  arch="$(arch_type)"
+
+  # PicoClaw release binaries use: picoclaw-{os}-{arch} (hyphens, lowercase)
+  # e.g. picoclaw-linux-amd64, picoclaw-linux-arm64, picoclaw-darwin-arm64
+  case "$os" in
+    darwin|linux) ;; # valid
+    *)
+      warn "Unsupported OS for PicoClaw binary download: $os"
+      warn "Build from source: git clone ${PICOCLAW_REPO} && cd picoclaw && make deps && make install"
+      return
+      ;;
+  esac
+
+  binary_name="picoclaw-${os}-${arch}"
+  dl_url="${PICOCLAW_REPO}/releases/latest/download/${binary_name}"
+  log "Downloading PicoClaw (${binary_name})..."
+
+  if curl -fsSL "$dl_url" -o /tmp/picoclaw 2>/dev/null; then
+    chmod +x /tmp/picoclaw
+    if command_exists sudo; then
+      sudo mv /tmp/picoclaw /usr/local/bin/picoclaw
+    else
+      mv /tmp/picoclaw "$HOME/.local/bin/picoclaw"
+    fi
   else
-    warn "PicoClaw install script not reachable at ${PICOCLAW_REPO}."
-    warn "Clone manually:"
-    warn "  git clone ${PICOCLAW_REPO} && cd picoclaw && npm install && npm link"
+    warn "Binary download failed (${dl_url})."
+    warn "Falling back to build from source..."
+    if command_exists go; then
+      local tmpdir; tmpdir="$(mktemp -d)"
+      git clone --depth 1 "${PICOCLAW_REPO}" "$tmpdir/picoclaw" 2>/dev/null
+      if [ -d "$tmpdir/picoclaw" ]; then
+        cd "$tmpdir/picoclaw"
+        make deps 2>/dev/null || true
+        make build 2>/dev/null
+        if [ -f build/picoclaw ]; then
+          cp build/picoclaw "$HOME/.local/bin/picoclaw"
+          chmod +x "$HOME/.local/bin/picoclaw"
+        fi
+        cd - >/dev/null
+      fi
+      rm -rf "$tmpdir"
+    else
+      warn "Go not available for source build. Install PicoClaw manually:"
+      warn "  git clone ${PICOCLAW_REPO} && cd picoclaw && make deps && make install"
+      return
+    fi
+  fi
+
+  if command_exists picoclaw; then
+    success "PicoClaw installed — $(picoclaw --version 2>/dev/null || echo 'version unknown')"
+    log "Run 'picoclaw onboard' to complete setup."
+  else
+    warn "PicoClaw not found in PATH after install. Continuing..."
   fi
 }
 
@@ -482,15 +732,34 @@ install_hermes() {
     return
   fi
 
-  log "Installing Hermes Agent from $HERMES_REPO ..."
-  if curl -fsSL "${HERMES_REPO}/releases/latest/download/install.sh" -o /tmp/hermes-install.sh 2>/dev/null; then
+  log "Installing Hermes Agent from NousResearch..."
+  # The official installer handles everything: Python, Node.js, venv, deps, global symlink
+  if curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh -o /tmp/hermes-install.sh 2>/dev/null; then
     bash /tmp/hermes-install.sh
     rm -f /tmp/hermes-install.sh
-    success "Hermes Agent installed"
+
+    # Hermes symlinks to ~/.local/bin/hermes — ensure it's in PATH for this session
+    export PATH="$HOME/.local/bin:$PATH"
+
+    if command_exists hermes; then
+      success "Hermes Agent installed"
+      log "Run 'hermes setup' to configure your LLM provider and messaging."
+    else
+      warn "Hermes installed but 'hermes' not found in PATH."
+      warn "The installer may have placed the binary elsewhere. Check with:"
+      warn "  find ~ -name hermes -type f -o -name hermes -type l 2>/dev/null | head -5"
+      warn "Then symlink it: ln -sf /path/to/hermes ~/.local/bin/hermes"
+    fi
   else
-    warn "Hermes install script not reachable at ${HERMES_REPO}."
-    warn "Clone manually:"
-    warn "  git clone ${HERMES_REPO} && cd hermes-agent && go build -o hermes . && mv hermes /usr/local/bin/"
+    warn "Hermes install script not reachable."
+    warn "Install manually:"
+    warn "  git clone --recurse-submodules ${HERMES_REPO}"
+    warn "  cd hermes-agent"
+    warn "  curl -LsSf https://astral.sh/uv/install.sh | sh"
+    warn "  uv venv venv --python 3.11"
+    warn "  export VIRTUAL_ENV=\"\$(pwd)/venv\""
+    warn "  uv pip install -e \".[all]\""
+    warn "  mkdir -p ~/.local/bin && ln -sf \"\$(pwd)/venv/bin/hermes\" ~/.local/bin/hermes"
   fi
 }
 
@@ -508,16 +777,18 @@ print_summary() {
     if command_exists "$cmd"; then
       local ver
       case "$cmd" in
-        brew)   ver="$(brew --version | head -1)" ;;
-        go)     ver="$(go version | awk '{print $3}')" ;;
+        brew)    ver="$(brew --version | head -1)" ;;
+        git)     ver="$(git --version)" ;;
+        go)      ver="$(go version | awk '{print $3}')" ;;
         python3) ver="$(python3 --version)" ;;
-        node)   ver="$(node --version)" ;;
-        npm)    ver="$(npm --version)" ;;
-        rclone) ver="$(rclone version | head -1 | awk '{print $2}')" ;;
-        aws)    ver="$(aws --version | awk '{print $1}')" ;;
-        code)   ver="$(code --version | head -1)" ;;
-        claude) ver="$(claude --version 2>/dev/null || echo 'installed')" ;;
-        *)      ver="installed" ;;
+        node)    ver="$(node --version)" ;;
+        npm)     ver="$(npm --version)" ;;
+        rclone)  ver="$(rclone version | head -1 | awk '{print $2}')" ;;
+        aws)     ver="$(aws --version | awk '{print $1}')" ;;
+        code)    ver="$(code --version | head -1)" ;;
+        docker)  ver="$(docker --version 2>/dev/null)$(docker compose version 2>/dev/null && echo ' + Compose')" ;;
+        claude)  ver="$(claude --version 2>/dev/null || echo 'installed')" ;;
+        *)       ver="installed" ;;
       esac
       printf "  ${GREEN}✓${RESET}  %-18s %s\n" "$label" "$ver"
     else
@@ -525,20 +796,25 @@ print_summary() {
     fi
   }
 
-  check "Homebrew"      brew
-  check "Go"            go
-  check "Python"        python3
-  check "Node.js"       node
-  check "npm"           npm
-  check "rclone"        rclone
-  check "aws-cli"       aws
-  check "s3cmd"         s3cmd
-  check "s5cmd"         s5cmd
-  check "VSCode"        code
-  check "Claude Code"   claude
-  check "OpenClaw"      openclaw
-  check "PicoClaw"      picoclaw
-  check "Hermes Agent"  hermes
+  # ── Tekt.Dev ──
+  check "Git"             git
+  check "Homebrew"        brew
+  check "Go"              go
+  check "Python"          python3
+  check "Node.js"         node
+  check "npm"             npm
+  check "VSCode"          code
+  check "Docker"          docker
+  # ── Tekt.Base ──
+  check "rclone"          rclone
+  check "aws-cli"         aws
+  check "s3cmd"           s3cmd
+  check "s5cmd"           s5cmd
+  # ── Tekt.Iris ──
+  check "Claude Code"     claude
+  check "OpenClaw"        openclaw
+  check "PicoClaw"        picoclaw
+  check "Hermes Agent"    hermes
 
   echo ""
   log "Restart your terminal (or run: source ~/.zshrc) to reload PATH."
@@ -547,7 +823,109 @@ print_summary() {
 }
 
 # =============================================================================
-# Main
+# Status — standalone environment check (bash install.sh status / tekt status)
+# =============================================================================
+tekt_status() {
+  reload_path
+
+  echo ""
+  echo -e "${BOLD}${CYAN}"
+  echo "  ████████╗███████╗██╗  ██╗████████╗"
+  echo "     ██╔══╝██╔════╝██║ ██╔╝╚══██╔══╝"
+  echo "     ██║   █████╗  █████╔╝    ██║   "
+  echo "     ██║   ██╔══╝  ██╔═██╗    ██║   "
+  echo "     ██║   ███████╗██║  ██╗   ██║   "
+  echo "     ╚═╝   ╚══════╝╚═╝  ╚═╝   ╚═╝   "
+  echo -e "${RESET}"
+  echo -e "  ${BOLD}Tekt Environment Status${RESET}  —  https://tekt.md"
+  echo ""
+  log "OS: $(uname -s) / Arch: $(arch_type)"
+  echo ""
+
+  local installed=0 missing=0
+  local missing_list=""
+
+  check_tool() {
+    local label="$1" cmd="$2" category="$3"
+    if command_exists "$cmd"; then
+      local ver
+      case "$cmd" in
+        brew)    ver="$(brew --version | head -1)" ;;
+        git)     ver="$(git --version)" ;;
+        go)      ver="$(go version | awk '{print $3}')" ;;
+        python3) ver="$(python3 --version)" ;;
+        node)    ver="$(node --version)" ;;
+        npm)     ver="$(npm --version)" ;;
+        rclone)  ver="$(rclone version | head -1 | awk '{print $2}')" ;;
+        aws)     ver="$(aws --version | awk '{print $1}')" ;;
+        code)    ver="$(code --version | head -1)" ;;
+        docker)  ver="$(docker --version 2>/dev/null)" ;;
+        claude)  ver="$(claude --version 2>/dev/null || echo 'installed')" ;;
+        *)       ver="$(${cmd} --version 2>/dev/null || echo 'installed')" ;;
+      esac
+      printf "  ${GREEN}✓${RESET}  %-18s %s\n" "$label" "$ver"
+      installed=$((installed + 1))
+    else
+      printf "  ${RED}✗${RESET}  %-18s %s\n" "$label" "not installed"
+      missing=$((missing + 1))
+      missing_list="${missing_list}  • ${label}\n"
+    fi
+  }
+
+  echo -e "${BOLD}Tekt.Dev — Development Environment${RESET}"
+  check_tool "Git"             git       dev
+  check_tool "Homebrew"        brew      dev
+  check_tool "Go"              go        dev
+  check_tool "Python"          python3   dev
+  check_tool "Node.js"         node      dev
+  check_tool "npm"             npm       dev
+  check_tool "VSCode"          code      dev
+  check_tool "Docker"          docker    dev
+  if command_exists docker && docker compose version &>/dev/null; then
+    printf "  ${GREEN}✓${RESET}  %-18s %s\n" "Docker Compose" "$(docker compose version 2>/dev/null)"
+  elif command_exists docker; then
+    printf "  ${YELLOW}?${RESET}  %-18s %s\n" "Docker Compose" "plugin not found"
+  fi
+
+  echo ""
+  echo -e "${BOLD}Tekt.Base — Communications & Sync${RESET}"
+  check_tool "rclone"          rclone    base
+  check_tool "aws-cli"         aws       base
+  check_tool "s3cmd"           s3cmd     base
+  check_tool "s5cmd"           s5cmd     base
+
+  echo ""
+  echo -e "${BOLD}Tekt.Iris — Intelligence${RESET}"
+  check_tool "Claude Code"     claude    iris
+  check_tool "OpenClaw"        openclaw  iris
+  check_tool "PicoClaw"        picoclaw  iris
+  check_tool "Hermes Agent"    hermes    iris
+
+  # ── Totals ──
+  local total=$((installed + missing))
+  echo ""
+  echo -e "  ─────────────────────────────────"
+  printf "  ${GREEN}${BOLD}%d${RESET} installed  /  " "$installed"
+  if [ "$missing" -gt 0 ]; then
+    printf "${RED}${BOLD}%d${RESET} missing  /  %d total\n" "$missing" "$total"
+  else
+    printf "${GREEN}${BOLD}0${RESET} missing  /  %d total\n" "$total"
+  fi
+
+  if [ "$missing" -gt 0 ]; then
+    echo ""
+    echo -e "  ${YELLOW}Missing:${RESET}"
+    echo -e "$missing_list"
+    log "Run 'bash install.sh' to install everything, or install individually."
+  else
+    echo ""
+    success "All Tekt tools are installed."
+  fi
+  echo ""
+}
+
+# =============================================================================
+# Main — full install
 # =============================================================================
 main() {
   echo ""
@@ -564,20 +942,56 @@ main() {
   log "OS: $(uname -s) / Arch: $(arch_type)"
   echo ""
 
-  install_homebrew
-  install_system_deps
-  install_go
-  install_python
-  install_nvm_node
-  install_rclone
-  install_s3_tools
-  install_vscode
-  install_claude_code
-  install_openclaw
-  install_picoclaw
-  install_hermes
+  # Ensure ~/.local/bin exists and is in PATH early — PicoClaw and Hermes install here
+  ensure_local_bin
+
+  # Each install is wrapped with || true so a single failure doesn't kill the script.
+  # The summary at the end shows what succeeded and what didn't.
+
+  # ── Tekt.Dev ──
+  install_git           || warn "Git install failed — continuing..."
+  install_homebrew      || warn "Homebrew install failed — continuing..."
+  install_system_deps   || warn "System deps install failed — continuing..."
+  install_go            || warn "Go install failed — continuing..."
+  install_python        || warn "Python install failed — continuing..."
+  install_nvm_node      || warn "nvm/Node install failed — continuing..."
+  install_vscode        || warn "VSCode install failed — continuing..."
+  install_docker        || warn "Docker install failed — continuing..."
+
+  # ── Tekt.Base ──
+  install_rclone        || warn "rclone install failed — continuing..."
+  install_s3_tools      || warn "S3 tools install failed — continuing..."
+
+  # ── Tekt.Iris ──
+  install_claude_code   || warn "Claude Code install failed — continuing..."
+  install_openclaw      || warn "OpenClaw install failed — continuing..."
+  install_picoclaw      || warn "PicoClaw install failed — continuing..."
+  install_hermes        || warn "Hermes Agent install failed — continuing..."
 
   print_summary
 }
 
-main "$@"
+# =============================================================================
+# Entry point — subcommand dispatch
+# =============================================================================
+case "${1:-}" in
+  status)
+    tekt_status
+    ;;
+  help|--help|-h)
+    echo "Usage: $(basename "$0") [command]"
+    echo ""
+    echo "Commands:"
+    echo "  (none)     Install all Tekt tools"
+    echo "  status     Check which tools are installed"
+    echo "  help       Show this help"
+    echo ""
+    ;;
+  "")
+    main
+    ;;
+  *)
+    error "Unknown command: $1"
+    echo "Run '$(basename "$0") help' for usage."
+    ;;
+esac
