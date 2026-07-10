@@ -21,6 +21,8 @@
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
+    html { scroll-behavior: smooth; }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background: var(--bg);
@@ -42,11 +44,132 @@
       font-weight: 800;
       color: var(--gold);
       letter-spacing: -0.5px;
+      text-decoration: none;
     }
 
     header .tagline {
       color: var(--muted);
       font-size: 0.95rem;
+    }
+
+    /* ── Navigation ─────────────────────────────────────────────────────── */
+    nav.site-nav {
+      background: var(--code-bg);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    nav.site-nav ul.nav-list {
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 1rem;
+    }
+
+    nav.site-nav li.nav-item { position: relative; }
+
+    nav.site-nav li.nav-item > a {
+      display: block;
+      padding: 0.65rem 0.9rem;
+      color: var(--text);
+      text-decoration: none;
+      font-size: 0.92rem;
+      font-weight: 600;
+      border-bottom: 3px solid transparent;
+      white-space: nowrap;
+    }
+
+    nav.site-nav li.nav-item > a:hover { color: var(--gold); }
+
+    nav.site-nav li.nav-item > a.active {
+      color: var(--gold);
+      border-bottom-color: var(--gold);
+    }
+
+    /* Section dropdown (desktop: hover / keyboard focus) */
+    nav.site-nav ul.sub {
+      list-style: none;
+      position: absolute;
+      left: 0;
+      top: 100%;
+      min-width: 240px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-top: 2px solid var(--gold);
+      border-radius: 0 0 6px 6px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      display: none;
+      padding: 0.35rem 0;
+    }
+
+    nav.site-nav li.nav-item:hover > ul.sub,
+    nav.site-nav li.nav-item:focus-within > ul.sub { display: block; }
+
+    nav.site-nav ul.sub a {
+      display: block;
+      padding: 0.4rem 1rem;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.86rem;
+    }
+
+    nav.site-nav ul.sub a:hover {
+      color: var(--gold);
+      background: rgba(245, 166, 35, 0.07);
+    }
+
+    /* Mobile menu: stacked, always-expanded sections */
+    nav.site-nav details.mobile-menu { display: none; }
+
+    @media (max-width: 760px) {
+      nav.site-nav ul.nav-list { display: none; }
+
+      nav.site-nav details.mobile-menu {
+        display: block;
+        padding: 0.4rem 1rem;
+      }
+
+      nav.site-nav details.mobile-menu summary {
+        cursor: pointer;
+        font-weight: 700;
+        color: var(--gold);
+        padding: 0.35rem 0;
+        list-style: none;
+      }
+
+      nav.site-nav details.mobile-menu summary::before { content: "☰  "; }
+
+      nav.site-nav details.mobile-menu ul {
+        list-style: none;
+        padding: 0.3rem 0 0.6rem;
+      }
+
+      nav.site-nav details.mobile-menu ul li > a {
+        display: block;
+        padding: 0.45rem 0;
+        color: var(--text);
+        font-weight: 700;
+        text-decoration: none;
+      }
+
+      nav.site-nav details.mobile-menu ul li > a.active { color: var(--gold); }
+
+      nav.site-nav details.mobile-menu ul ul {
+        padding-left: 1rem;
+        border-left: 2px solid var(--border);
+        margin: 0 0 0.4rem 0.2rem;
+      }
+
+      nav.site-nav details.mobile-menu ul ul a {
+        font-weight: 400;
+        font-size: 0.88rem;
+        color: var(--muted);
+        padding: 0.25rem 0;
+      }
     }
 
     .hero {
@@ -98,8 +221,13 @@
     }
 
     main h1 { font-size: 2rem; display: none; } /* title shown in hero */
-    main h2 { font-size: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
-    main h3 { font-size: 1.2rem; }
+    main h2 {
+      font-size: 1.5rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.3rem;
+      scroll-margin-top: 3.5rem; /* clear the sticky nav when jumping to anchors */
+    }
+    main h3 { font-size: 1.2rem; scroll-margin-top: 3.5rem; }
 
     main p { margin: 0.75rem 0; }
 
@@ -185,14 +313,118 @@
   </style>
 </head>
 <body>
+
+  {# ── Site map: pages + their major sections (anchor slugs are generated
+        client-side from the h2 text — see the script at the end of body) ── #}
+  {% set nav = [
+    { title: "Home", url: "/", sections: [
+      { label: "Quick Start",        slug: "quick-start" },
+      { label: "After the install",  slug: "after-the-install" },
+      { label: "Documentation path", slug: "the-documentation-path" },
+      { label: "What gets installed",slug: "what-gets-installed" },
+      { label: "Prerequisites",      slug: "prerequisites" },
+      { label: "Customizing",        slug: "customizing" },
+      { label: "Architecture",       slug: "architecture-reference" },
+      { label: "Troubleshooting",    slug: "troubleshooting" },
+      { label: "Credits",            slug: "credits" }
+    ] },
+    { title: "00 · Arkitype", url: "/00-arkitype/", sections: [
+      { label: "The arkitype section", slug: "the-00-arkitype-section" },
+      { label: "Archetypes",           slug: "archetypes" },
+      { label: "Topology",             slug: "topology" },
+      { label: "The signal flow",      slug: "the-signal-flow" },
+      { label: "Round-trip editing",   slug: "round-trip-editing" }
+    ] },
+    { title: "01 · Infrastructure", url: "/01-infrastructure/", sections: [
+      { label: "Git",       slug: "1-git" },
+      { label: "Homebrew",  slug: "2-homebrew-macoslinux" },
+      { label: "Go",        slug: "3-go" },
+      { label: "Python",    slug: "4-python-via-pyenv" },
+      { label: "Node.js",   slug: "5-nvm-nodejs" },
+      { label: "VS Code",   slug: "6-visual-studio-code" },
+      { label: "Docker",    slug: "7-docker-docker-compose" },
+      { label: ".NET SDK",  slug: "8-net-sdk" },
+      { label: "Tailscale", slug: "9-tailscale-private-mesh-network" },
+      { label: "ngrok",     slug: "10-ngrok-instant-public-tunnels" },
+      { label: "Verify",    slug: "verify-the-layer" }
+    ] },
+    { title: "02 · Database", url: "/02-database/", sections: [
+      { label: "Workspace layout",     slug: "workspace-layout" },
+      { label: "rclone",               slug: "1-rclone-the-sync-backbone" },
+      { label: "AWS CLI / s3cmd / s5cmd", slug: "2-aws-cli-v2-s3cmd-s5cmd" },
+      { label: "MinIO",                slug: "3-minio-your-own-s3-optional-but-sovereign" },
+      { label: "Postgres + pgvector",  slug: "4-postgresql-pgvector-optional" },
+      { label: "Mongo + Meilisearch",  slug: "5-mongodb-meilisearch-bundled-with-librechat" },
+      { label: "SQLite",               slug: "6-sqlite-the-quiet-default" },
+      { label: "Verify",               slug: "verify-the-layer" }
+    ] },
+    { title: "03 · Software", url: "/03-software/", sections: [
+      { label: "Local models (Ollama)", slug: "local-models" },
+      { label: "The claw family",       slug: "the-claw-family-friends" },
+      { label: "MCP servers & MCPHub",  slug: "mcp-servers-one-hub-four-locals-https-out" },
+      { label: "Sovrant",               slug: "sovrant-post-install-command-center" },
+      { label: "Verify",                slug: "verify-the-layer" }
+    ] },
+    { title: "04 · Interface", url: "/04-interface/", sections: [
+      { label: "LibreChat",          slug: "1-librechat-multi-model-chat-ui" },
+      { label: "n8n",                slug: "2-n8n-workflow-automation" },
+      { label: "MCPHub dashboard",   slug: "3-mcphub-dashboard" },
+      { label: "Reverse proxy",      slug: "4-reverse-proxy-optional-one-hostname-for-everything" },
+      { label: "Sharing (HTTPS out)",slug: "5-sharing-from-your-home-lab" },
+      { label: "Study-hall checklist", slug: "6-study-hall-checklist" }
+    ] },
+    { title: "Downloads", url: "/install.sh", sections: [
+      { label: "install.sh (Linux/macOS/WSL2)", slug: "", href: "/install.sh" },
+      { label: "install.ps1 (Windows)",         slug: "", href: "/install.ps1" },
+      { label: "tekt.catalog.yaml (pins)",      slug: "", href: "/tekt.catalog.yaml" }
+    ] }
+  ] %}
+
   <header>
-    <span class="logo">tekt.md</span>
-    <span class="tagline">Platform Bootstrap</span>
+    <a class="logo" href="/">tekt.md</a>
+    <span class="tagline">The Linux of AI Orchestration at the Edge</span>
   </header>
 
+  <nav class="site-nav" aria-label="Site">
+    {# Desktop: horizontal bar with hover/focus dropdowns #}
+    <ul class="nav-list">
+      {% for p in nav %}
+      <li class="nav-item">
+        <a href="{{ p.url }}"{% if page.url == p.url %} class="active"{% endif %}>{{ p.title }}</a>
+        {% if p.sections and p.sections.length %}
+        <ul class="sub">
+          {% for s in p.sections %}
+          <li><a href="{{ s.href or (p.url + '#' + s.slug) }}">{{ s.label }}</a></li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+
+    {# Mobile: collapsible stacked menu with sections always visible #}
+    <details class="mobile-menu">
+      <summary>Menu</summary>
+      <ul>
+        {% for p in nav %}
+        <li>
+          <a href="{{ p.url }}"{% if page.url == p.url %} class="active"{% endif %}>{{ p.title }}</a>
+          {% if p.sections and p.sections.length %}
+          <ul>
+            {% for s in p.sections %}
+            <li><a href="{{ s.href or (p.url + '#' + s.slug) }}">{{ s.label }}</a></li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </details>
+  </nav>
+
   <div class="hero">
-    <h1>tekt.md</h1>
-    <p>Set up a complete Tekt development environment in a single script.</p>
+    <h1>{{ title or "tekt.md" }}</h1>
+    <p>Set up a complete Tekt environment — dev toolchain, agents, MCP servers, and UIs — in a single script.</p>
     <a class="cta" href="https://github.com/xingh/tekt.md">View on GitHub</a>
   </div>
 
@@ -201,7 +433,30 @@
   </main>
 
   <footer>
-    &copy; 2025 tekt.md — built with Eleventy
+    &copy; 2026 tekt.md — built with Eleventy. Every tool credits its upstream creators.
   </footer>
+
+  <script>
+    // Give every h2/h3 in the content an anchor id so the nav section links
+    // resolve. Slug rule must stay in sync with the slugs in the nav data
+    // above: lowercase → strip non-alphanumerics (keep spaces/hyphens) →
+    // collapse whitespace to single hyphens.
+    (function () {
+      var slug = function (t) {
+        return t.toLowerCase()
+                .replace(/[^a-z0-9\s-]/g, "")
+                .trim()
+                .replace(/\s+/g, "-");
+      };
+      document.querySelectorAll("main h2, main h3").forEach(function (h) {
+        if (!h.id) h.id = slug(h.textContent);
+      });
+      // If the page loaded with a #fragment before ids existed, jump now.
+      if (location.hash) {
+        var target = document.getElementById(location.hash.slice(1));
+        if (target) target.scrollIntoView();
+      }
+    })();
+  </script>
 </body>
 </html>
