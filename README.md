@@ -10,6 +10,9 @@ permalink: /index.html
 
 **AI Sovereignty · Security · Privacy.** Tekt is an open distribution that bootstraps a complete AI engineering environment — dev tooling, workspace sync, local models, seven agent runtimes, an MCP server hub, and self-hosted chat & workflow UIs — on *your* hardware, with *your* keys, in a single script.
 
+![Tekt architecture body](tekt.body.png)
+
+
 Tekt is a distribution, not a product: every component below is someone else's excellent work, credited explicitly. What Tekt adds is the composition — the [arkitype](/00-arkitype/) — and a bootstrap that gets an AI engineer from a blank machine to a working edge/cloud stack in one sitting.
 
 ---
