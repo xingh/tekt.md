@@ -31,6 +31,27 @@ function Success($m) { Write-Host "[OK]  $m" -ForegroundColor Green }
 function Warn($m)    { Write-Host "[!]   $m" -ForegroundColor Yellow }
 function Section($m) { Write-Host "`n== $m ==" -ForegroundColor Blue }
 
+function Refresh-SessionPath {
+    $paths = [System.Collections.Generic.List[string]]::new()
+    foreach ($scope in "Machine", "User") {
+        $value = [Environment]::GetEnvironmentVariable("Path", $scope)
+        if ($value) {
+            foreach ($part in ($value -split ";")) {
+                if ($part -and -not $paths.Contains($part)) { $paths.Add($part) }
+            }
+        }
+    }
+    foreach ($part in @(
+        $env:Path -split ";";
+        (Join-Path $HOME ".local\bin");
+        (Join-Path $HOME "AppData\Roaming\npm");
+        (Join-Path $HOME "AppData\Local\Microsoft\WinGet\Links")
+    )) {
+        if ($part -and -not $paths.Contains($part)) { $paths.Add($part) }
+    }
+    $env:Path = $paths -join ";"
+}
+
 # ── Tekt instance layout ───────────────────────────────────────────────────────
 $TektHome      = if ($env:TEKT_HOME) { $env:TEKT_HOME } else { Join-Path $HOME "Tekt" }
 $TektInstance  = Join-Path $TektHome "Instances\$env:COMPUTERNAME"
@@ -61,6 +82,7 @@ function Install-Winget($label, $id, $cmd) {
     }
     try {
         winget install --id $id -e --accept-source-agreements --accept-package-agreements
+        Refresh-SessionPath
         Success "$label installed ($id)"
     } catch {
         Warn "$label install failed. Try:  winget search $label   — or install manually."
@@ -71,10 +93,17 @@ function Install-Winget($label, $id, $cmd) {
 function Install-ClaudeCode {
     Section "Claude Code"
     if (Test-Cmd "claude") { Success "Claude Code already installed"; return }
-    try { irm https://claude.ai/install.ps1 | iex; Success "Claude Code installed (native)" }
+    try {
+        irm https://claude.ai/install.ps1 | iex
+        Refresh-SessionPath
+        Success "Claude Code installed (native)"
+    }
     catch {
         Warn "Native installer failed — trying npm..."
-        if (Test-Cmd "npm") { npm install -g @anthropic-ai/claude-code }
+        if (Test-Cmd "npm") {
+            npm install -g @anthropic-ai/claude-code
+            Refresh-SessionPath
+        }
         else { Warn "Install manually: irm https://claude.ai/install.ps1 | iex" }
     }
 }
@@ -84,6 +113,7 @@ function Install-OpenClaw {
     if (Test-Cmd "openclaw") { Success "OpenClaw already installed"; return }
     if (Test-Cmd "npm") {
         npm install -g openclaw@latest
+        Refresh-SessionPath
         Log "Run 'openclaw onboard --install-daemon' to complete setup."
     } else { Warn "npm not found (install Node LTS first): npm install -g openclaw@latest" }
 }
@@ -96,6 +126,7 @@ function Install-PicoClaw {
     $url = "https://github.com/sipeed/picoclaw/releases/latest/download/picoclaw-windows-amd64.exe"
     try {
         Invoke-WebRequest -Uri $url -OutFile (Join-Path $bin "picoclaw.exe")
+        Refresh-SessionPath
         Success "PicoClaw installed to $bin (add it to PATH if needed)"
         Log "Run 'picoclaw onboard' to complete setup."
     } catch { Warn "Download failed ($url). See https://github.com/sipeed/picoclaw/releases" }
@@ -115,6 +146,7 @@ function Install-Nanobot {
     if (Test-Cmd "nanobot") { Success "Nanobot already installed"; return }
     if (Test-Cmd "pip") {
         pip install nanobot-ai
+        Refresh-SessionPath
         Log "Run 'nanobot onboard' to configure. Upstream: github.com/HKUDS/nanobot"
         Log "(The Go MCP host at nanobot-ai/nanobot is a different project.)"
     } else { Warn "pip not found — install Python 3.11+ first, then: pip install nanobot-ai" }
@@ -348,6 +380,7 @@ function Tekt-Status {
 # ── Main ───────────────────────────────────────────────────────────────────────
 function Main {
     Write-Host "`nTekt Bootstrap Installer (Windows) — https://tekt.md`n" -ForegroundColor Cyan
+    Refresh-SessionPath
     Log "Tip: WSL2 gives full Linux parity — wsl --install, then bash install.sh"
 
     # Tekt.Dev
@@ -379,7 +412,7 @@ function Main {
 
     Write-Host ""
     Log "Staged (tekt.cloud): bring up with  .\install.ps1 mcp   and   .\install.ps1 ui"
-    Log "Restart your terminal to refresh PATH, then:  .\install.ps1 status"
+    Log "PATH is refreshed during install. If a new command still isn't found, open a new PowerShell window, then run:  .\install.ps1 status"
 }
 
 switch ($Command) {
