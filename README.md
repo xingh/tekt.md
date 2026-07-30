@@ -31,6 +31,8 @@ curl -fsSL https://tekt.md/install.sh | bash
 irm https://tekt.md/install.ps1 | iex
 ```
 
+The PowerShell installer refreshes `PATH` as it goes, so you should not need to pause and restart between steps. If a newly installed command still is not visible after the script finishes, open a new PowerShell window and run `.\install.ps1 status`.
+
 **Git:**
 
 ```
@@ -177,7 +179,7 @@ Full topology, archetypes, and signal flow: [00 — Arkitype](/00-arkitype/).
 
 ## Troubleshooting
 
-The most common fix for everything: **restart your terminal** (PATH caching). Per-tool troubleshooting now lives in the doc for its layer — [01](/01-infrastructure/), [02](/02-database/), [03](/03-software/), [04](/04-interface/). Still stuck? `bash install.sh status` tells you exactly what's missing, and every install function prints its manual fallback commands when it fails.
+The most common fix for everything: **open a fresh terminal** (PATH caching). The Windows PowerShell installer refreshes `PATH` during the run, so this is usually only needed after the script exits. Per-tool troubleshooting now lives in the doc for its layer — [01](/01-infrastructure/), [02](/02-database/), [03](/03-software/), [04](/04-interface/). Still stuck? `bash install.sh status` tells you exactly what's missing, and every install function prints its manual fallback commands when it fails.
 
 ## Contributing
 
