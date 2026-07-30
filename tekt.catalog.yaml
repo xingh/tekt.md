@@ -1,0 +1,255 @@
+# =============================================================================
+# tekt.catalog.yaml
+# Tekt Platform — Tool Catalog & Version Pins
+# https://tekt.md
+#
+# This file is the single source of truth for what the Tekt bootstrap installs.
+# Edit the `pins:` block to change versions — install.sh and install.ps1 read
+# these pins at startup (if this file sits next to the script).
+#
+# Every tool below credits its upstream creators. Tekt is a distribution:
+# the work belongs to the people and teams listed under `upstream`.
+# =============================================================================
+
+catalog_version: "2026.07"
+distribution: tekt.md
+positioning: "The Linux of AI Orchestration at the edge — AI Sovereignty, Security, Privacy"
+
+# ── Version pins (read by install.sh / install.ps1) ──────────────────────────
+pins:
+  GO_VERSION: "1.26.2"
+  PYTHON_VERSION: "3.14"
+  NODE_VERSION: "24"          # Active LTS (Krypton)
+  NVM_VERSION: "0.40.4"
+  DOTNET_CHANNEL: "10.0"      # .NET SDK channel — Sovrant builds on .NET 10 / C# 14
+  MCPHUB_IMAGE: "samanhappy/mcphub:latest"
+  N8N_IMAGE: "docker.n8n.io/n8nio/n8n:latest"
+
+# ── Archetype schema contracts ────────────────────────────────────────────────
+schema_archetypes:
+  memory_engine:
+    scope: "local agent/session runtime state"
+    stores: ["sqlite", "vector sidecar", "fts"]
+    write_pattern: "high-frequency append/update"
+    retention: "short-to-medium"
+  knowledge_engine:
+    scope: "shared durable knowledge state"
+    stores: ["postgres(+pgvector)", "document store", "graph-shaped models"]
+    write_pattern: "curated ingest + revision"
+    retention: "long-lived canonical"
+
+# ── Layers ────────────────────────────────────────────────────────────────────
+layers:
+
+  tekt.dev:
+    title: "Development Environment"
+    doc: 01-infrastructure.md
+    tools:
+      - name: Git
+        cmd: git
+        upstream: "Software Freedom Conservancy / git-scm.com"
+        docs: https://git-scm.com
+      - name: Homebrew
+        cmd: brew
+        upstream: "Homebrew maintainers — brew.sh"
+        docs: https://brew.sh
+      - name: Go
+        cmd: go
+        upstream: "The Go Authors — go.dev"
+        docs: https://go.dev/doc/install
+      - name: Python (pyenv)
+        cmd: python3
+        upstream: "Python Software Foundation; pyenv by Yamashita/Danhper et al."
+        docs: https://github.com/pyenv/pyenv
+      - name: nvm / Node.js
+        cmd: node
+        upstream: "OpenJS Foundation; nvm by Jordan Harband et al."
+        docs: https://github.com/nvm-sh/nvm
+      - name: Visual Studio Code
+        cmd: code
+        upstream: "Microsoft"
+        docs: https://code.visualstudio.com
+      - name: Docker & Compose
+        cmd: docker
+        upstream: "Docker, Inc."
+        docs: https://docs.docker.com/engine/install/
+      - name: .NET SDK
+        cmd: dotnet
+        version_pin: DOTNET_CHANNEL
+        upstream: "Microsoft — dotnet.microsoft.com (MIT)"
+        docs: https://dotnet.microsoft.com/download
+        note: "Required to build Sovrant from source."
+
+  tekt.base:
+    title: "Data, Storage & Sync"
+    doc: 02-database.md
+    tools:
+      - name: rclone
+        cmd: rclone
+        upstream: "Nick Craig-Wood & contributors — rclone.org"
+        docs: https://rclone.org
+      - name: AWS CLI v2
+        cmd: aws
+        upstream: "Amazon Web Services"
+        docs: https://docs.aws.amazon.com/cli/
+      - name: s3cmd
+        cmd: s3cmd
+        upstream: "s3tools.org"
+        docs: https://s3tools.org/s3cmd
+      - name: s5cmd
+        cmd: s5cmd
+        upstream: "Peak — github.com/peak/s5cmd"
+        docs: https://github.com/peak/s5cmd
+      - name: MinIO
+        runtime: docker
+        upstream: "MinIO, Inc. (AGPL v3)"
+        docs: https://min.io/docs
+        optional: true
+      - name: PostgreSQL + pgvector
+        runtime: docker
+        upstream: "PostgreSQL Global Development Group; pgvector by Andrew Kane"
+        optional: true
+        note: "Required for MCPHub Smart Routing (database mode)"
+      - name: MongoDB + Meilisearch
+        runtime: docker
+        upstream: "MongoDB, Inc.; Meili SAS"
+        optional: true
+        note: "Bundled inside the LibreChat compose stack"
+
+  tekt.edge:
+    title: "Network & Exposure"
+    doc: 04-interface.md
+    tools:
+      - name: Tailscale
+        cmd: tailscale
+        upstream: "Tailscale Inc. (client is open source, BSD-3)"
+        docs: https://tailscale.com/kb
+        install_linux: "curl -fsSL https://tailscale.com/install.sh | sh"
+      - name: ngrok
+        cmd: ngrok
+        upstream: "ngrok, Inc. (proprietary agent, free tier)"
+        docs: https://ngrok.com/docs
+        note: "Requires a free authtoken: ngrok config add-authtoken <token>"
+
+  tekt.iris:
+    title: "Intelligence — Agents & Models"
+    doc: 03-software.md
+    tools:
+      - name: Ollama
+        cmd: ollama
+        upstream: "Ollama — ollama.com (MIT)"
+        docs: https://ollama.com
+        install_linux: "curl -fsSL https://ollama.com/install.sh | sh"
+      - name: Claude Code
+        cmd: claude
+        upstream: "Anthropic"
+        repo: https://github.com/anthropics/claude-code
+        install: "curl -fsSL https://claude.ai/install.sh | bash"
+        install_windows: "irm https://claude.ai/install.ps1 | iex"
+      - name: Claude Desktop
+        runtime: desktop-app
+        upstream: "Anthropic"
+        docs: https://claude.ai/download
+        install_macos: "brew install --cask claude"
+        install_windows: "winget install --id Anthropic.Claude -e"
+        note: "Desktop companion app; command detection may vary by platform."
+      - name: Zed (Agent mode)
+        cmd: zed
+        upstream: "Zed Industries"
+        docs: https://zed.dev/docs
+        install_macos: "brew install --cask zed"
+        install_linux: "curl -fsSL https://zed.dev/install.sh | bash"
+        install_windows: "winget install --id ZedIndustries.Zed -e"
+        note: "Enable Agent mode in Assistant settings after install."
+      - name: OpenClaw
+        cmd: openclaw
+        upstream: "OpenClaw contributors"
+        repo: https://github.com/openclaw/openclaw
+        install: "curl -fsSL https://openclaw.ai/install.sh | bash"
+        note: "Bootstrap defers interactive onboarding; run openclaw onboard --install-daemon manually."
+      - name: PicoClaw
+        cmd: picoclaw
+        upstream: "Sipeed"
+        repo: https://github.com/sipeed/picoclaw
+      - name: Hermes Agent
+        cmd: hermes
+        upstream: "Nous Research"
+        repo: https://github.com/NousResearch/hermes-agent
+        note: "Linux/macOS/WSL2 only — no native Windows"
+      - name: ZeroClaw
+        cmd: zeroclaw
+        upstream: "zeroclaw-labs contributors (Rust)"
+        repo: https://github.com/zeroclaw-labs/zeroclaw
+        install: "curl -fsSL https://raw.githubusercontent.com/zeroclaw-labs/zeroclaw/master/install.sh | bash"
+      - name: Nanobot
+        cmd: nanobot
+        upstream: "HKUDS (Xubin Ren & contributors, MIT)"
+        repo: https://github.com/HKUDS/nanobot
+        install: "pip install nanobot-ai"
+        note: >
+          Name collision: nanobot-ai/nanobot (Go) is a different project — an MCP
+          host by the Obot team. Tekt ships the HKUDS lightweight agent. If you
+          want the MCP-host Nanobot instead, see github.com/nanobot-ai/nanobot.
+      - name: NanoClaw
+        runtime: source
+        upstream: "qwibitai (MIT) — runs on the Claude Agent SDK"
+        repo: https://github.com/qwibitai/nanoclaw
+        note: "Setup is Claude-Code-guided: git clone, then run `claude` and /setup"
+
+  tekt.cloud:
+    title: "Chat, Workflows & Command Center"
+    doc: 04-interface.md
+    tools:
+      - name: MCPHub
+        runtime: docker
+        upstream: "samanhappy & contributors (Apache-2.0)"
+        repo: https://github.com/samanhappy/mcphub
+        image: samanhappy/mcphub:latest
+        port: 3000
+        endpoints:
+          all: /mcp
+          group: /mcp/{group}
+          single: /mcp/{server}
+          smart: /mcp/$smart
+      - name: LibreChat
+        runtime: docker-compose
+        upstream: "Danny Avila & contributors (MIT)"
+        repo: https://github.com/danny-avila/LibreChat
+        port: 3080
+      - name: n8n
+        runtime: docker
+        upstream: "n8n GmbH (Sustainable Use License — fair-code, not OSI)"
+        repo: https://github.com/n8n-io/n8n
+        image: docker.n8n.io/n8nio/n8n
+        port: 5678
+      - name: Sovrant
+        runtime: "dotnet (source build — .NET 10 / C# 14)"
+        upstream: "Anant Corporation"
+        repo: https://github.com/ramseur/sovrant
+        license: "BSL 1.1 — source-available, NOT OSI open source; converts to Apache-2.0 on 2029-05-15"
+        ports: { web: 5100, server: 5200 }
+        note: "Command center for agents — CLI, OpenAI-compatible server, desktop, web, MCP server mode (:5200/mcp with SOVRANT_MCP_HTTP=true). Installer clones and builds it; requires .NET 10 SDK."
+
+# ── Curated MCP servers ───────────────────────────────────────────────────────
+# These four run locally (inside MCPHub), operate on your machine's Tekt
+# workspace, and are exposed through MCPHub's HTTP endpoint — put HTTPS in
+# front with `bash install.sh share` (Tailscale Serve or ngrok).
+# Swap any entry: edit ~/Tekt/Instances/<host>/mcp/mcp_settings.json and the
+# hub hot-reloads. This list is the default four; add more freely.
+mcp_servers:
+  filesystem:
+    package: "@modelcontextprotocol/server-filesystem"
+    upstream: "Anthropic / MCP reference servers"
+    scope: /workspace
+  fetch:
+    package: "mcp-server-fetch"
+    runner: uvx
+    upstream: "Anthropic / MCP reference servers"
+  memory:
+    package: "@modelcontextprotocol/server-memory"
+    upstream: "Anthropic / MCP reference servers"
+  github:
+    package: "@modelcontextprotocol/server-github"
+    upstream: "Anthropic / MCP reference servers"
+    env:
+      GITHUB_PERSONAL_ACCESS_TOKEN: "set-me"
