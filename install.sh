@@ -5,7 +5,8 @@
 # https://tekt.md
 #
 # Installs: Homebrew, Go, Python (pyenv), nvm/Node, rclone, AWS CLI,
-#           VSCode, Docker, Tailscale, ngrok, Ollama, Claude Code, OpenClaw,
+#           VSCode, Docker, Tailscale, ngrok, Ollama, Claude Code,
+#           Claude Desktop (macOS), Zed (+ Agent mode), OpenClaw,
 #           PicoClaw, Hermes Agent, ZeroClaw, Nanobot, NanoClaw
 # Stages:   MCPHub (+ curated MCP servers), LibreChat, n8n, Sovrant
 #
@@ -82,6 +83,15 @@ load_catalog_pins || true
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 command_exists() { command -v "$1" &>/dev/null; }
+
+claude_desktop_installed() {
+  local os; os="$(os_type)"
+  if [ "$os" = "macos" ]; then
+    [ -d "/Applications/Claude.app" ] || [ -d "$HOME/Applications/Claude.app" ]
+  else
+    return 1
+  fi
+}
 
 os_type() {
   case "$(uname -s)" in
@@ -638,6 +648,76 @@ install_claude_code() {
 }
 
 # =============================================================================
+# 9a. Claude Desktop
+# =============================================================================
+install_claude_desktop() {
+  section "Claude Desktop"
+
+  if claude_desktop_installed; then
+    success "Claude Desktop already installed"
+    return
+  fi
+
+  local os; os="$(os_type)"
+  if [ "$os" != "macos" ]; then
+    warn "Claude Desktop auto-install is currently macOS-only in this bootstrap."
+    warn "Install manually from https://claude.ai/download"
+    return
+  fi
+
+  if command_exists brew; then
+    log "Installing Claude Desktop via Homebrew cask..."
+    if brew install --cask claude --quiet; then
+      success "Claude Desktop installed"
+    else
+      warn "Claude Desktop cask install failed."
+      warn "Install manually from https://claude.ai/download"
+    fi
+  else
+    warn "Homebrew not available. Install Claude Desktop manually: https://claude.ai/download"
+  fi
+}
+
+# =============================================================================
+# 9b. Zed (with Agent mode)
+# =============================================================================
+install_zed_agent() {
+  section "Zed (Agent)"
+
+  if command_exists zed; then
+    success "Zed already installed — $(zed --version 2>/dev/null || echo 'version unknown')"
+    return
+  fi
+
+  local os; os="$(os_type)"
+  if [ "$os" = "macos" ]; then
+    if command_exists brew; then
+      log "Installing Zed via Homebrew cask..."
+      brew install --cask zed --quiet \
+        && success "Zed installed (open Zed and enable Agent mode in Assistant settings)" \
+        || warn "Zed cask install failed. Install manually: https://zed.dev/download"
+    else
+      warn "Homebrew not available. Install Zed manually: https://zed.dev/download"
+    fi
+    return
+  fi
+
+  if curl -fsSL https://zed.dev/install.sh -o /tmp/zed-install.sh 2>/dev/null; then
+    bash /tmp/zed-install.sh
+    rm -f /tmp/zed-install.sh
+    reload_path
+    if command_exists zed; then
+      success "Zed installed — $(zed --version 2>/dev/null || echo 'version unknown')"
+      log "Open Zed and enable Agent mode in Assistant settings."
+    else
+      warn "Zed installer finished, but 'zed' is not in PATH yet. Restart your shell and run: zed --version"
+    fi
+  else
+    warn "Zed installer not reachable. Install manually: https://zed.dev/download"
+  fi
+}
+
+# =============================================================================
 # 10. OpenClaw
 # =============================================================================
 install_openclaw() {
@@ -652,17 +732,15 @@ install_openclaw() {
   export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
   [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
 
-  # Prefer the official install script (handles platform detection)
-  log "Installing OpenClaw..."
-  if curl -fsSL https://openclaw.ai/install.sh -o /tmp/openclaw-install.sh 2>/dev/null; then
+  # Prefer npm for a quiet, non-interactive bootstrap install.
+  log "Installing OpenClaw (non-interactive bootstrap mode)..."
+  if command_exists npm; then
+    npm install -g openclaw@latest
+    success "OpenClaw installed (npm)"
+  elif curl -fsSL https://openclaw.ai/install.sh -o /tmp/openclaw-install.sh 2>/dev/null; then
     bash /tmp/openclaw-install.sh
     rm -f /tmp/openclaw-install.sh
     success "OpenClaw installed (script)"
-  elif command_exists npm; then
-    # Fallback: npm global install
-    log "Install script not reachable — falling back to npm..."
-    npm install -g openclaw@latest
-    success "OpenClaw installed (npm)"
   else
     error "Could not install OpenClaw. Install manually:"
     error "  npm install -g openclaw@latest"
@@ -672,7 +750,8 @@ install_openclaw() {
   fi
 
   if command_exists openclaw; then
-    log "Run 'openclaw onboard --install-daemon' to complete setup."
+    log "OpenClaw interactive onboarding is deferred to keep full install non-interruptive."
+    log "Next step (manual): openclaw onboard --install-daemon"
   else
     # npm global bin may not be in PATH — add it
     if command_exists npm; then
@@ -684,7 +763,8 @@ install_openclaw() {
       fi
     fi
     if command_exists openclaw; then
-      log "Run 'openclaw onboard --install-daemon' to complete setup."
+      log "OpenClaw interactive onboarding is deferred to keep full install non-interruptive."
+      log "Next step (manual): openclaw onboard --install-daemon"
     else
       warn "openclaw not found in PATH after install. Restart your shell or run: source ~/.bashrc"
     fi
@@ -1258,9 +1338,16 @@ print_summary() {
 
   check() {
     local label="$1" cmd="$2"
-    if command_exists "$cmd"; then
+    local installed=1
+    if [ "$cmd" = "__claude_desktop__" ]; then
+      claude_desktop_installed || installed=0
+    elif ! command_exists "$cmd"; then
+      installed=0
+    fi
+    if [ "$installed" -eq 1 ]; then
       local ver
       case "$cmd" in
+        __claude_desktop__) ver="installed (app bundle)" ;;
         brew)    ver="$(brew --version | head -1)" ;;
         git)     ver="$(git --version)" ;;
         go)      ver="$(go version | awk '{print $3}')" ;;
@@ -1301,6 +1388,8 @@ print_summary() {
   # ── Tekt.Iris ──
   check "Ollama"          ollama
   check "Claude Code"     claude
+  check "Claude Desktop"  __claude_desktop__
+  check "Zed (Agent)"     zed
   check "OpenClaw"        openclaw
   check "PicoClaw"        picoclaw
   check "Hermes Agent"    hermes
@@ -1312,7 +1401,8 @@ print_summary() {
   log "  bash install.sh mcp     # MCPHub + curated MCP servers on :3000"
   log "  bash install.sh ui      # LibreChat :3080 and n8n :5678"
   log "  Sovrant Web :5100       # cd \$TEKT_INSTANCE/sovrant && dotnet run --project src/Sovrant.Web"
-  log "Restart your terminal (or run: source ~/.zshrc) to reload PATH."
+  log "Restart your terminal/session to reload PATH (required after some installs)."
+  log "OpenClaw onboarding is intentionally deferred: run 'openclaw onboard --install-daemon' when ready."
   log "Docs: https://tekt.md"
   echo ""
 }
@@ -1342,9 +1432,16 @@ tekt_status() {
 
   check_tool() {
     local label="$1" cmd="$2" category="$3"
-    if command_exists "$cmd"; then
+    local installed=1
+    if [ "$cmd" = "__claude_desktop__" ]; then
+      claude_desktop_installed || installed=0
+    elif ! command_exists "$cmd"; then
+      installed=0
+    fi
+    if [ "$installed" -eq 1 ]; then
       local ver
       case "$cmd" in
+        __claude_desktop__) ver="installed (app bundle)" ;;
         brew)    ver="$(brew --version | head -1)" ;;
         git)     ver="$(git --version)" ;;
         go)      ver="$(go version | awk '{print $3}')" ;;
@@ -1398,6 +1495,8 @@ tekt_status() {
   echo -e "${BOLD}Tekt.Iris — Intelligence${RESET}"
   check_tool "Ollama"          ollama    iris
   check_tool "Claude Code"     claude    iris
+  check_tool "Claude Desktop"  __claude_desktop__ iris
+  check_tool "Zed (Agent)"     zed       iris
   check_tool "OpenClaw"        openclaw  iris
   check_tool "PicoClaw"        picoclaw  iris
   check_tool "Hermes Agent"    hermes    iris
@@ -1500,6 +1599,8 @@ main() {
   # ── Tekt.Iris ──
   install_ollama        || warn "Ollama install failed — continuing..."
   install_claude_code   || warn "Claude Code install failed — continuing..."
+  install_claude_desktop || warn "Claude Desktop install skipped — continuing..."
+  install_zed_agent     || warn "Zed install failed — continuing..."
   install_openclaw      || warn "OpenClaw install failed — continuing..."
   install_picoclaw      || warn "PicoClaw install failed — continuing..."
   install_hermes        || warn "Hermes Agent install failed — continuing..."

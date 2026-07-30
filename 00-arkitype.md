@@ -28,8 +28,8 @@ arkitype:
     tekt.dev:   full            # git, brew, go, python, node, vscode, docker
     tekt.base:  full            # rclone, aws-cli, s3cmd, s5cmd
     tekt.edge:  full            # tailscale, ngrok
-    tekt.iris:  full            # ollama, claude-code, openclaw, picoclaw,
-                                # hermes, zeroclaw, nanobot, nanoclaw
+    tekt.iris:  full            # ollama, claude-code, claude-desktop, zed,
+                                # openclaw, picoclaw, hermes, zeroclaw, nanobot, nanoclaw
     tekt.cloud: staged          # mcphub + librechat + n8n scaffolded, started on demand
   workspace:
     root: ~/Tekt
@@ -43,6 +43,31 @@ arkitype:
     librechat: 3080
     n8n: 5678
     mcphub: 3000
+```
+
+## Schema archetypes: Memory Engine vs Knowledge Engine
+
+To keep state design consistent across nodes, Tekt distinguishes two schema archetypes:
+
+- **Memory Engine schema** — fast, local, mutable runtime memory for an agent/session (conversation turns, embeddings, recalls, short-lived working context).  
+- **Knowledge Engine schema** — durable, normalized, shared knowledge structures (documents, entities, relationships, provenance, curation state).
+
+Reference contract:
+
+```yaml
+schema_archetypes:
+  memory_engine:
+    scope: local-agent-or-session
+    storage_defaults: [sqlite, vector-index, fts]
+    write_pattern: high-frequency append/update
+    retention: short-to-medium
+    examples: [agent memories, session traces, transient recalls]
+  knowledge_engine:
+    scope: shared-workspace-or-org
+    storage_defaults: [postgres, document-store, graph-shapes]
+    write_pattern: curated ingest + revision
+    retention: long-lived canonical records
+    examples: [source registry, entity graph, validated insights]
 ```
 
 ## Archetypes

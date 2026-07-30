@@ -120,12 +120,17 @@ Five documents take you from composition to a shared, working home-lab stack:
 | --- | --- | --- |
 | Ollama | Local open-weight models — the sovereignty baseline | Ollama (MIT) |
 | Claude Code | Agentic coding CLI | Anthropic |
+| Claude Desktop | Local desktop client for Claude workflows | Anthropic |
+| Zed (Agent mode) | Local code editor with built-in AI agent workflows | Zed Industries |
 | OpenClaw | Full agentic workspace runtime (Node) | OpenClaw contributors |
 | PicoClaw | Single Go binary for $10 edge hardware | Sipeed |
 | Hermes Agent | Self-improving agent + messaging gateway (no native Windows) | Nous Research |
 | ZeroClaw | Rust runtime, <5MB RAM, ~10ms cold start | zeroclaw-labs contributors |
 | Nanobot | Ultra-light Python agent with WebUI & MCP | HKUDS (MIT) |
 | NanoClaw | Container-isolated agents on the Claude Agent SDK (staged; setup via Claude Code) | qwibitai (MIT) |
+
+OpenClaw onboarding is intentionally deferred during bootstrap to keep install non-interruptive: run `openclaw onboard --install-daemon` when ready.  
+On Windows, restart PowerShell after installer runs, then verify with `.\install.ps1 status`.
 
 ### Tekt.Cloud — Chat, Workflows & Command Center
 
