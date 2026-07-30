@@ -5,7 +5,7 @@
 #
 # Installs (winget): Git, Go, Python, Node LTS, VS Code, Docker Desktop,
 #                    rclone, AWS CLI, Tailscale, ngrok, Ollama
-# Installs (native): Claude Code, OpenClaw, PicoClaw, ZeroClaw, Nanobot
+# Installs (native): Claude Code, Claude Desktop, Zed Agent, OpenClaw, PicoClaw, ZeroClaw, Nanobot
 # Stages:            NanoClaw (WSL2/Docker), MCPHub, LibreChat, n8n
 # Not on Windows:    Hermes Agent (use WSL2 → bash install.sh)
 #
@@ -51,6 +51,10 @@ if (Test-Path $catalogPath) {
 }
 
 function Test-Cmd($name) { [bool](Get-Command $name -ErrorAction SilentlyContinue) }
+function Test-ClaudeDesktop {
+    (Test-Path (Join-Path $env:LOCALAPPDATA "Programs\Claude\Claude.exe")) -or
+    (Test-Path (Join-Path ${env:ProgramFiles} "Claude\Claude.exe"))
+}
 
 function Install-Winget($label, $id, $cmd) {
     Section $label
@@ -79,12 +83,43 @@ function Install-ClaudeCode {
     }
 }
 
+function Install-ClaudeDesktop {
+    Section "Claude Desktop"
+    if (Test-ClaudeDesktop) { Success "Claude Desktop already installed"; return }
+    if (Test-Cmd "winget") {
+        try {
+            winget install --id Anthropic.Claude -e --accept-source-agreements --accept-package-agreements
+            Success "Claude Desktop installed"
+        } catch {
+            Warn "Claude Desktop winget install failed. Install manually: https://claude.ai/download"
+        }
+    } else {
+        Warn "winget not found. Install Claude Desktop manually: https://claude.ai/download"
+    }
+}
+
+function Install-ZedAgent {
+    Section "Zed (Agent)"
+    if (Test-Cmd "zed") { Success "Zed already installed"; return }
+    if (Test-Cmd "winget") {
+        try {
+            winget install --id ZedIndustries.Zed -e --accept-source-agreements --accept-package-agreements
+            Success "Zed installed (open Zed and enable Agent mode in Assistant settings)"
+        } catch {
+            Warn "Zed winget install failed. Install manually: https://zed.dev/download"
+        }
+    } else {
+        Warn "winget not found. Install Zed manually: https://zed.dev/download"
+    }
+}
+
 function Install-OpenClaw {
     Section "OpenClaw"
     if (Test-Cmd "openclaw") { Success "OpenClaw already installed"; return }
     if (Test-Cmd "npm") {
         npm install -g openclaw@latest
-        Log "Run 'openclaw onboard --install-daemon' to complete setup."
+        Log "OpenClaw onboarding is intentionally deferred so install stays non-interruptive."
+        Log "Next step (manual): openclaw onboard --install-daemon"
     } else { Warn "npm not found (install Node LTS first): npm install -g openclaw@latest" }
 }
 
@@ -313,6 +348,7 @@ function Tekt-Status {
         @("Tekt.Edge", "ngrok",       "ngrok"),
         @("Tekt.Iris", "Ollama",      "ollama"),
         @("Tekt.Iris", "Claude Code", "claude"),
+        @("Tekt.Iris", "Zed (Agent)", "zed"),
         @("Tekt.Iris", "OpenClaw",    "openclaw"),
         @("Tekt.Iris", "PicoClaw",    "picoclaw"),
         @("Tekt.Iris", "ZeroClaw",    "zeroclaw"),
@@ -323,6 +359,8 @@ function Tekt-Status {
         if (Test-Cmd $r[2]) { Write-Host ("  [OK]  {0,-10} {1}" -f $r[0], $r[1]) -ForegroundColor Green; $installed++ }
         else                { Write-Host ("  [ X]  {0,-10} {1}" -f $r[0], $r[1]) -ForegroundColor Red;   $missing++ }
     }
+    if (Test-ClaudeDesktop) { Write-Host "  [OK]  Tekt.Iris  Claude Desktop" -ForegroundColor Green; $installed++ }
+    else { Write-Host "  [ X]  Tekt.Iris  Claude Desktop" -ForegroundColor Red; $missing++ }
     Write-Host ("  [--]  Tekt.Iris  Hermes Agent — WSL2 only (wsl --install, then bash install.sh)") -ForegroundColor Yellow
     if (Test-Path (Join-Path $TektAgentsDir "nanoclaw\.git")) { Write-Host "  [OK]  Tekt.Iris  NanoClaw (staged)" -ForegroundColor Green }
     if (Test-Path (Join-Path $TektInstance "sovrant\.git")) {
@@ -343,6 +381,7 @@ function Tekt-Status {
     }
     Write-Host "`n  $installed installed / $missing missing`n"
     if ($missing -gt 0) { Log "Run '.\install.ps1' to install everything." }
+    Log "If tools were just installed, pause and restart PowerShell, then run '.\install.ps1 status' again."
 }
 
 # ── Main ───────────────────────────────────────────────────────────────────────
@@ -367,6 +406,8 @@ function Main {
     # Tekt.Iris
     Install-Winget "Ollama"         "Ollama.Ollama"              "ollama"
     Install-ClaudeCode
+    Install-ClaudeDesktop
+    Install-ZedAgent
     Install-OpenClaw
     Install-PicoClaw
     Install-ZeroClaw
@@ -379,7 +420,8 @@ function Main {
 
     Write-Host ""
     Log "Staged (tekt.cloud): bring up with  .\install.ps1 mcp   and   .\install.ps1 ui"
-    Log "Restart your terminal to refresh PATH, then:  .\install.ps1 status"
+    Log "Pause here, then restart PowerShell to refresh PATH and app registrations."
+    Log "After restart, verify with:  .\install.ps1 status"
 }
 
 switch ($Command) {
@@ -394,6 +436,8 @@ switch ($Command) {
         Write-Host "  mcp           MCPHub + curated MCP servers (:3000)"
         Write-Host "  ui            LibreChat (:3080) + n8n (:5678)"
         Write-Host "  share <port>  HTTPS tunnel (Tailscale Serve, else ngrok)"
+        Write-Host ""
+        Write-Host "Windows note: after installs, restart PowerShell, then run .\install.ps1 status"
     }
     "catalog" {
         if (Test-Path $catalogPath) { Get-Content $catalogPath }

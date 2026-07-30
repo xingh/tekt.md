@@ -25,6 +25,19 @@ pins:
   MCPHUB_IMAGE: "samanhappy/mcphub:latest"
   N8N_IMAGE: "docker.n8n.io/n8nio/n8n:latest"
 
+# ── Archetype schema contracts ────────────────────────────────────────────────
+schema_archetypes:
+  memory_engine:
+    scope: "local agent/session runtime state"
+    stores: ["sqlite", "vector sidecar", "fts"]
+    write_pattern: "high-frequency append/update"
+    retention: "short-to-medium"
+  knowledge_engine:
+    scope: "shared durable knowledge state"
+    stores: ["postgres(+pgvector)", "document store", "graph-shaped models"]
+    write_pattern: "curated ingest + revision"
+    retention: "long-lived canonical"
+
 # ── Layers ────────────────────────────────────────────────────────────────────
 layers:
 
@@ -133,11 +146,27 @@ layers:
         repo: https://github.com/anthropics/claude-code
         install: "curl -fsSL https://claude.ai/install.sh | bash"
         install_windows: "irm https://claude.ai/install.ps1 | iex"
+      - name: Claude Desktop
+        runtime: desktop-app
+        upstream: "Anthropic"
+        docs: https://claude.ai/download
+        install_macos: "brew install --cask claude"
+        install_windows: "winget install --id Anthropic.Claude -e"
+        note: "Desktop companion app; command detection may vary by platform."
+      - name: Zed (Agent mode)
+        cmd: zed
+        upstream: "Zed Industries"
+        docs: https://zed.dev/docs
+        install_macos: "brew install --cask zed"
+        install_linux: "curl -fsSL https://zed.dev/install.sh | bash"
+        install_windows: "winget install --id ZedIndustries.Zed -e"
+        note: "Enable Agent mode in Assistant settings after install."
       - name: OpenClaw
         cmd: openclaw
         upstream: "OpenClaw contributors"
         repo: https://github.com/openclaw/openclaw
         install: "curl -fsSL https://openclaw.ai/install.sh | bash"
+        note: "Bootstrap defers interactive onboarding; run openclaw onboard --install-daemon manually."
       - name: PicoClaw
         cmd: picoclaw
         upstream: "Sipeed"

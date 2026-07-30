@@ -41,7 +41,7 @@ Upstream: Ollama (MIT). Docs: [ollama.com](https://ollama.com)
 
 ## The claw family & friends
 
-Seven agent runtimes, one shared philosophy: your machine, your keys, your workspace. Pick per archetype — you don't need all of them on one box (the full install puts them there so you can compare).
+Seven agent runtimes plus local companion clients, one shared philosophy: your machine, your keys, your workspace. Pick per archetype — you don't need all of them on one box (the full install puts them there so you can compare).
 
 ### Claude Code — Anthropic
 
@@ -54,6 +54,27 @@ claude doctor
 
 Docs: [code.claude.com](https://code.claude.com/docs/en/setup) · Repo: [anthropics/claude-code](https://github.com/anthropics/claude-code)
 
+### Claude Desktop — Anthropic
+
+```bash
+# macOS (via Homebrew cask)
+brew install --cask claude
+# Windows: winget install --id Anthropic.Claude -e
+```
+
+Download: [claude.ai/download](https://claude.ai/download)
+
+### Zed (Agent mode) — Zed Industries
+
+```bash
+# macOS
+brew install --cask zed
+# Linux
+curl -fsSL https://zed.dev/install.sh | bash
+```
+
+Open Zed and enable Agent mode from Assistant settings.
+
 ### OpenClaw — the full workspace runtime
 
 Node.js 24 required.
@@ -63,6 +84,8 @@ curl -fsSL https://openclaw.ai/install.sh | bash   # or: npm install -g openclaw
 openclaw onboard --install-daemon
 openclaw dashboard
 ```
+
+> Tekt's full bootstrap intentionally **defers interactive onboarding** so Linux installs stay non-interruptive. After install finishes, run `openclaw onboard --install-daemon` when you're ready.
 
 Docs: [docs.openclaw.ai](https://docs.openclaw.ai) · Repo: [openclaw/openclaw](https://github.com/openclaw/openclaw)
 
@@ -257,6 +280,11 @@ dotnet run --project src/Sovrant.Cli -- --model gpt-4o-mini
 ```
 
 On Windows, launch the desktop app without a console window: `Start-Process dotnet -ArgumentList "run --project src/Sovrant.Desktop" -WindowStyle Hidden`. Sovrant supports Ollama and LM Studio as providers, so it pairs naturally with the local Ollama install above — AI spend toward zero is one of its stated tenets.
+
+For first-run UX clarity in Sovrant login flows:
+
+- Show a **conditional onboarding message** only when no admin exists yet: “First account will become administrator.”
+- Show a visible **in-progress indicator** during account creation / first-login setup so users know initialization is active.
 
 ### Sovrant as an MCP server
 

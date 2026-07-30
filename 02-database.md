@@ -134,6 +134,17 @@ You do **not** install these by hand — LibreChat's official `docker compose` s
 
 Several agents keep local state in SQLite with zero setup: ZeroClaw's memory engine (vector + FTS5 hybrid search), NanoClaw's session databases, n8n's default store. Nothing to install — just know your agent state lives under each tool's home directory, and back it up with your workspace sync if you care about it.
 
+## 7. Archetype schema contract: Memory Engine vs Knowledge Engine
+
+Tekt formalizes two storage archetypes so architecture decisions stay consistent across tools:
+
+| Archetype | Purpose | Typical stores | Data pattern |
+| --- | --- | --- | --- |
+| **Memory Engine** | Local runtime memory for active agent/session behavior | SQLite, vector sidecar, FTS indexes | High-churn append/update, short-to-medium retention |
+| **Knowledge Engine** | Durable, shared knowledge for teams/workspaces | Postgres (+pgvector), document stores, graph-shaped models | Curated ingest, versioned updates, long-lived retention |
+
+Rule of thumb: keep fast conversational/working state in Memory Engine schemas; promote validated, reusable knowledge artifacts to Knowledge Engine schemas.
+
 ---
 
 ## Verify the layer

@@ -174,7 +174,31 @@ Or just: `bash install.sh share <port>` — Tailscale Serve if your tailnet is u
 - Prefer the tailnet tier; use Funnel/ngrok for demos, then tear them down
 - Registration: LibreChat's `.env` lets you disable open signups (`ALLOW_REGISTRATION=false`) once your users are in
 
-## 6. Study-hall checklist
+## 6. Sovrant UX contract (Claude-like ergonomics, current palette)
+
+Target direction: preserve Sovrant's current color scheme while adopting Claude-style interaction ergonomics.
+
+### Onboarding/login behavior
+
+- If no admin exists yet, show conditional copy: **“First registered account will become admin.”**
+- If an admin already exists, do **not** show that message.
+- During signup/login provisioning, show a clear progress state (spinner + “Setting up your workspace…” label).
+
+### UI structure goals
+
+- Left navigation: compact, always-visible conversation/workspace rail.
+- Main panel: readable message column with stable width and generous vertical rhythm.
+- Composer area: fixed bottom input with clear model/tool context and run-state feedback.
+- Activity feedback: explicit states for connecting, running, waiting, and completed actions.
+
+### Acceptance checklist
+
+- [ ] Current color tokens remain intact (no palette drift).
+- [ ] Information hierarchy mirrors Claude-like flow (nav → conversation → composer).
+- [ ] Login/admin state messaging is conditional and accurate.
+- [ ] Long-running actions always display visible “something is happening” feedback.
+
+## 7. Study-hall checklist
 
 The self-help path for a fresh AI engineer, start to finish:
 
