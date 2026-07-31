@@ -12,6 +12,15 @@ permalink: /index.html
 
 ![Tekt architecture body](./tekt.body.png)
 
+```mermaid
+flowchart LR
+  Bootstrap["Bootstrap<br/>install.sh / install.ps1"] --> Dev["Tekt.Dev<br/>Git · Go · Python · Node · VS Code · Docker"]
+  Dev --> Base["Tekt.Base<br/>rclone · AWS CLI · MinIO"]
+  Base --> Edge["Tekt.Edge<br/>Tailscale · ngrok"]
+  Edge --> Iris["Tekt.Iris<br/>Ollama · Agent runtimes · MCP servers"]
+  Iris --> Cloud["Tekt.Cloud<br/>MCPHub · LibreChat · n8n · Sovrant"]
+```
+
 
 Tekt is a distribution, not a product: every component below is someone else's excellent work, credited explicitly. What Tekt adds is the composition — the [arkitype](/00-arkitype/) — and a bootstrap that gets an AI engineer from a blank machine to a working edge/cloud stack in one sitting.
 
