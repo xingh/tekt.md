@@ -116,7 +116,17 @@ tekt skill list                  # every shared skill, and which ones are in you
 
 After each sync, Tekt links every skill in your Spaces into Claude Code as `~/.claude/skills/<space>--<skill>`. When someone deletes a skill, it disappears from everyone's Claude Code, and when you disconnect a Space, its skills go too. Tekt only manages its own links. Your personal skills and any folder that isn't Tekt's are never touched.
 
-Skills from people outside your group work the same way. Put them in a Space's `skills/` folder, for example the curated arkitype skills listed on the [catalog](/catalog/#skill).
+### Add a curated skill
+
+Tekt keeps a shelf of hand-picked, tested skills. Adding one puts it in a Space, so everyone in the Space gets it:
+
+```bash
+tekt skill shelf                              # what's on the shelf
+tekt skill add rfp-proposal-responder team    # into the team Space, and your Claude Code
+tekt space sync team                          # now everyone in the Space has it
+```
+
+If you have just one Space, you can leave off its name. With no Space yet, `tekt skill add <skill>` installs it just for you. The whole shelf is listed on the [catalog](/catalog/#skill).
 
 ## See your Spaces in a window
 
@@ -149,6 +159,8 @@ RcloneView is **freemium** software from Bdrive Inc. The core features are free,
 | `tekt skill new <space> <name>` | Start a shared skill from a template |
 | `tekt skill list` | Every shared skill, and which are in your Claude Code |
 | `tekt skill link` | Re-link shared skills into Claude Code (repair) |
+| `tekt skill shelf` | Hand-curated skills you can add in one step |
+| `tekt skill add <skill> [space]` | Add a curated skill to a Space, so everyone gets it |
 | `tekt status` | Your tools, your Spaces, and which AI apps are connected, in one check |
 
 ## How it works

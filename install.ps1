@@ -36,6 +36,8 @@
 #         tekt skill list                 # skills in your Spaces, and which are linked
 #         tekt skill new <space> <name>   # start a skill; everyone gets it after sync
 #         tekt skill link                 # re-link shared skills into Claude Code
+#         tekt skill shelf                # hand-curated skills you can add in one step
+#         tekt skill add <skill> [space]  # add a curated skill to a Space (everyone gets it)
 #
 # One-liner: irm https://tekt.md/install.ps1 | iex
 # Tip: for the full Linux-parity experience, install WSL2 (wsl --install)
@@ -1272,6 +1274,108 @@ function Skill-New($rawSpace, $rawName) {
     Log "Edit it, then run  tekt space sync $space  - everyone in the Space gets it."
 }
 
+# -- Skill shelf: hand-curated skills from the Tekt catalog (tekt skill shelf | add)
+function Get-TektCatalogFile {   # $TEKT_CATALOG, the catalog next to this script, or a fresh copy from tekt.md; $null if none
+    if ($env:TEKT_CATALOG -and (Test-Path -LiteralPath $env:TEKT_CATALOG -PathType Leaf)) { return $env:TEKT_CATALOG }
+    if ($PSScriptRoot) {
+        $here = Join-Path $PSScriptRoot "tekt.catalog.yaml"
+        if (Test-Path -LiteralPath $here -PathType Leaf) { return $here }
+    }
+    $tmp = Join-Path ([IO.Path]::GetTempPath()) "tekt.catalog.$PID.yaml"
+    try {
+        Invoke-WebRequest -Uri "https://tekt.md/tekt.catalog.yaml" -OutFile $tmp -UseBasicParsing -ErrorAction Stop
+        return $tmp
+    } catch { return $null }
+}
+
+# Entries under skills: as objects { Name, Summary, Source } - plain regex, no YAML module needed.
+# The block starts at "skills:" and ends at the next line that starts without a space.
+function Get-CatalogSkills($file) {
+    $skills = [System.Collections.Generic.List[object]]::new()
+    $on = $false; $cur = $null
+    foreach ($line in [IO.File]::ReadAllLines($file)) {
+        if (-not $on) { if ($line -match '^skills:') { $on = $true }; continue }
+        if ($line -match '^[^ #]') { break }
+        if ($line -match '^  ([a-z0-9-]+):\s*$') {
+            $cur = [pscustomobject]@{ Name = $Matches[1]; Summary = ""; Source = "" }
+            $skills.Add($cur)
+            continue
+        }
+        if (-not $cur) { continue }
+        if ($line -match '^    summary:\s*"?(.*?)"?\s*$') { $cur.Summary = $Matches[1]; continue }
+        if ($line -match '^    source:\s*(\S+)') { $cur.Source = $Matches[1].Trim('"'); continue }
+    }
+    return $skills.ToArray()
+}
+
+function Skill-Shelf {
+    Section "The skill shelf - hand-curated skills"
+    $cat = Get-TektCatalogFile
+    if (-not $cat) { Err "Couldn't read the catalog. Check your connection and try again."; return }
+    foreach ($s in @(Get-CatalogSkills $cat)) {
+        $inSpace = @(Get-ChildItem -LiteralPath $TektSpaces -Directory -ErrorAction Ignore |
+            Where-Object { Test-Path -LiteralPath (Join-Path (Join-Path (Join-Path $_.FullName "skills") $s.Name) "SKILL.md") }).Count -gt 0
+        $personal = Test-Path -LiteralPath (Join-Path (Join-Path $TektClaudeSkills $s.Name) "SKILL.md")
+        $have = if ($inSpace -or $personal) { "  (you have it)" } else { "" }
+        if ($s.Source) { Write-Host "  * " -ForegroundColor Green -NoNewline }
+        else           { Write-Host "  o " -ForegroundColor Yellow -NoNewline }
+        Write-Host ("{0,-24} {1}{2}" -f $s.Name, $s.Summary, $have)
+    }
+    Log "* add with:  tekt skill add <skill> [space]    o not a standalone skill yet - see https://tekt.md/catalog/#skill"
+}
+
+function Skill-Add($rawName, $rawSpace) {
+    if (-not $rawName) { Err "Which skill?  tekt skill add <skill> [space]   (see: tekt skill shelf)"; return }
+    $name = ([string]$rawName).Trim().ToLowerInvariant()
+    $cat  = Get-TektCatalogFile
+    if (-not $cat) { Err "Couldn't read the catalog. Check your connection and try again."; return }
+    $entry = @(Get-CatalogSkills $cat | Where-Object { $_.Name -eq $name }) | Select-Object -First 1
+    if (-not $entry) { Err "'$name' isn't on the shelf. See:  tekt skill shelf"; return }
+    if (-not $entry.Source) {
+        Warn "'$name' isn't a standalone skill yet. It comes with the arkitype plugin in Claude Code:"
+        Warn "  /plugin marketplace add xingh/arkitype   then   /plugin install arkitype@arkitype"
+        return
+    }
+
+    $space = ""
+    if ($rawSpace) {
+        $space = ConvertTo-SpaceName $rawSpace
+    } else {
+        $dirs = @(Get-SpaceDirs)
+        if ($dirs.Count -eq 1) { $space = Split-Path $dirs[0] -Leaf }
+        elseif ($dirs.Count -gt 1) { Err "You have several Spaces. Pick one:  tekt skill add $name <space>   (see: tekt space list)"; return }
+    }
+    if ($space) {
+        $sdir = Join-Path $TektSpaces $space
+        if (-not (Test-Path -LiteralPath (Join-Path $sdir ".tekt-space"))) { Err "No Space named '$rawSpace'. See:  tekt space list"; return }
+        $dest = Join-Path (Join-Path $sdir "skills") $name
+    } else {
+        $dest = Join-Path $TektClaudeSkills $name   # no Spaces yet: just for you
+    }
+    $md = Join-Path $dest "SKILL.md"
+    if (Test-Path -LiteralPath $md) { Warn "You already have '$name' ($md)."; return }
+
+    $created = -not (Test-Path -LiteralPath $dest)
+    New-Item -ItemType Directory -Force -Path $dest | Out-Null
+    try {
+        Invoke-WebRequest -Uri $entry.Source -OutFile $md -UseBasicParsing -ErrorAction Stop
+    } catch {
+        # Only remove what this command made: never a folder that was already there
+        if ($created) { Remove-Item -LiteralPath $dest -Recurse -Force -ErrorAction Ignore }
+        else          { Remove-Item -LiteralPath $md -Force -ErrorAction Ignore }
+        Err "Couldn't download '$name'. Check your connection and try again."
+        return
+    }
+    if ($space) {
+        Link-SpaceSkills $space
+        Success "Added '$name' to the $space Space and to your Claude Code."
+        Log "Run  tekt space sync $space  and everyone in the Space gets it."
+    } else {
+        Success "Added '$name' to your Claude Code ($dest)."
+        Log "Make a Space to share skills with people:  tekt space add team drive"
+    }
+}
+
 function Invoke-SkillCmd($argv) {
     $argv = @($argv)
     $sub = if ($argv.Count -ge 1 -and $argv[0]) { $argv[0] } else { "list" }
@@ -1282,7 +1386,9 @@ function Invoke-SkillCmd($argv) {
         "ls"    { Skill-List }
         "new"   { Skill-New $a1 $a2 }
         "link"  { Link-SpaceSkills; Success "Shared skills linked into Claude Code ($TektClaudeSkills)" }
-        default { Err "Unknown: skill $sub - use list, new or link" }
+        "shelf" { Skill-Shelf }
+        "add"   { Skill-Add $a1 $a2 }
+        default { Err "Unknown: skill $sub - use list, new, link, shelf or add" }
     }
 }
 
@@ -1786,6 +1892,8 @@ switch ($Command) {
         Write-Host "  skill list                            Skills shared in your Spaces, and which are in Claude Code"
         Write-Host "  skill new <space> <name>              Start a skill in a Space; everyone gets it after sync"
         Write-Host "  skill link                            Re-link shared skills into Claude Code"
+        Write-Host "  skill shelf                           Hand-curated skills you can add in one step"
+        Write-Host "  skill add <skill> [space]             Add a curated skill to a Space (everyone gets it)"
         Write-Host ""
         Write-Host "Windows note: after installs, restart PowerShell, then run .\install.ps1 status"
     }
