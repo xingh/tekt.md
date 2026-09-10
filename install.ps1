@@ -112,8 +112,14 @@ if (Test-Path $catalogPath) {
 
 function Test-Cmd($name) { [bool](Get-Command $name -ErrorAction SilentlyContinue) }
 function Test-ClaudeDesktop {
-    (Test-Path (Join-Path $env:LOCALAPPDATA "Programs\Claude\Claude.exe")) -or
-    (Test-Path (Join-Path ${env:ProgramFiles} "Claude\Claude.exe"))
+    $candidates = @()
+    if ($env:LOCALAPPDATA) {
+        $candidates += Join-Path $env:LOCALAPPDATA "AnthropicClaude\claude.exe"     # per-user install
+        $candidates += Join-Path $env:LOCALAPPDATA "Programs\Claude\Claude.exe"
+    }
+    if ($env:ProgramFiles) { $candidates += Join-Path $env:ProgramFiles "Claude\Claude.exe" }
+    foreach ($p in $candidates) { if (Test-Path $p) { return $true } }
+    return $false
 }
 
 # -- winget: preflight and honest results -------------------------------------
@@ -222,16 +228,26 @@ function Install-ClaudeCode {
 
 function Install-ClaudeDesktop {
     Section "Claude Desktop"
-    if (Test-ClaudeDesktop) { Success "Claude Desktop already installed"; return }
-    if (Test-Cmd "winget") {
-        try {
-            winget install --id Anthropic.Claude -e --accept-source-agreements --accept-package-agreements
-            Success "Claude Desktop installed"
-        } catch {
-            Warn "Claude Desktop winget install failed. Install manually: https://claude.ai/download"
-        }
+    if (Test-ClaudeDesktop) { Success "Claude Desktop already installed"; Add-InstallResult "Claude Desktop" $true; return }
+    if (-not (Test-Cmd "winget")) {
+        Warn "winget not found. Install Claude Desktop from https://claude.ai/download"
+        Add-InstallResult "Claude Desktop" $false
+        return
+    }
+    # Judge by winget's exit code and by the app actually being there, never by try/catch (#25)
+    winget install --id Anthropic.Claude -e --source winget --accept-source-agreements --accept-package-agreements
+    $code = $LASTEXITCODE
+    if ($WingetOkCodes -notcontains $code) {
+        Warn "Claude Desktop didn't install (winget exit code $(Format-ExitCode $code)). Get it from https://claude.ai/download"
+        Add-InstallResult "Claude Desktop" $false
+        return
+    }
+    if (Test-ClaudeDesktop) {
+        Success "Claude Desktop installed - sign in with your claude.ai account"
+        Add-InstallResult "Claude Desktop" $true
     } else {
-        Warn "winget not found. Install Claude Desktop manually: https://claude.ai/download"
+        Warn "winget finished, but Tekt can't find Claude Desktop yet. Open Claude from the Start menu; if it isn't there, get it from https://claude.ai/download"
+        Add-InstallResult "Claude Desktop" $true -Pending
     }
 }
 

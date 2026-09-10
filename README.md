@@ -186,7 +186,7 @@ Five documents take you from composition to a shared, working home-lab stack:
 | --- | --- | --- |
 | Ollama | Local open-weight models — the sovereignty baseline | Ollama (MIT) |
 | Claude Code | Agentic coding CLI | Anthropic |
-| Claude Desktop | Local desktop client for Claude workflows | Anthropic |
+| Claude Desktop | Desktop app for Claude on macOS, Windows, and Linux (beta: Ubuntu/Debian) | Anthropic |
 | Zed (Agent mode) | Local code editor with built-in AI agent workflows | Zed Industries |
 | OpenClaw | Full agentic workspace runtime (Node) | OpenClaw contributors |
 | PicoClaw | Single Go binary for $10 edge hardware | Sipeed |
