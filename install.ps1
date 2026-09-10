@@ -4,8 +4,9 @@
 # https://tekt.md
 #
 # Installs (winget): Git, GitHub CLI, Go, Python, Node LTS, VS Code, Docker Desktop,
-#                    rclone, AWS CLI, Tailscale, ngrok, Ollama
-# Installs (native): Claude Code, Claude Desktop, Zed Agent, OpenClaw, PicoClaw, ZeroClaw, Nanobot
+#                    rclone, AWS CLI, Tailscale, ngrok, Ollama, crush
+# Installs (native): Claude Code, Claude Desktop, Zed Agent, OpenClaw, PicoClaw, ZeroClaw, Nanobot,
+#                    Codex CLI, opencode
 # Stages:            NanoClaw (WSL2/Docker), MCPHub, LibreChat, n8n
 # Not on Windows:    Hermes Agent (use WSL2 -> bash install.sh)
 #
@@ -29,7 +30,7 @@
 #         tekt space autosync on|off                  # sync every 10 minutes
 #
 # Connect - let your AI apps use your Spaces (MCP filesystem server "tekt-spaces"):
-#         tekt connect [app]    # all (default), claude-code, claude-desktop, codex
+#         tekt connect [app]    # all (default), claude-code, claude-desktop, codex, opencode, crush
 #
 # Shared skills - skills in a Space appear in everyone's Claude Code:
 #         tekt skill list                 # skills in your Spaces, and which are linked
@@ -300,6 +301,64 @@ function Install-NanoClaw {
     git clone --depth 1 https://github.com/qwibitai/nanoclaw.git $dest
     Log "NanoClaw setup is Claude-Code-guided: cd $dest ; claude  -> then /setup"
     Log "Requires Docker Desktop. WSL2 is the smoothest path on Windows."
+}
+
+# -- More AI apps: Codex CLI (OpenAI), opencode, crush (Charm) -----------------
+# Each is verified on PATH before [OK]; "installed but not on PATH yet" is Pending.
+function Install-Codex {
+    Section "Codex CLI (OpenAI)"
+    if (Test-Cmd "codex") { Success "Codex CLI already installed"; Add-InstallResult "Codex CLI" $true; return }
+    $claimed = $false
+    # Run OpenAI's installer in its own PowerShell process (as OpenAI documents it), so an
+    # `exit` inside that script can't end this installer.
+    $ps = if (Test-Cmd "pwsh") { "pwsh" } else { "powershell" }
+    & $ps -NoProfile -ExecutionPolicy Bypass -Command "irm https://chatgpt.com/codex/install.ps1 | iex"
+    if ($LASTEXITCODE -eq 0) { $claimed = $true }
+    else { Warn "The official Codex installer didn't finish (exit code $LASTEXITCODE)." }
+    Refresh-SessionPath
+    if (-not (Test-Cmd "codex") -and (Test-Cmd "npm")) {
+        Log "Trying npm instead: npm install -g @openai/codex"
+        npm install -g @openai/codex
+        if ($LASTEXITCODE -eq 0) { $claimed = $true }
+        Refresh-SessionPath
+    }
+    if (Test-Cmd "codex") {
+        Success "Codex CLI installed - sign in with: codex login"
+        Add-InstallResult "Codex CLI" $true
+    } elseif ($claimed) {
+        Warn "Codex CLI was installed but isn't on PATH yet. Open a new PowerShell window, then run: codex login"
+        Add-InstallResult "Codex CLI" $true -Pending
+    } else {
+        Warn "Codex CLI didn't install. Try: npm install -g @openai/codex"
+        Add-InstallResult "Codex CLI" $false
+    }
+}
+
+function Install-OpenCode {
+    Section "opencode"
+    if (Test-Cmd "opencode") { Success "opencode already installed"; Add-InstallResult "opencode" $true; return }
+    if (-not (Test-Cmd "npm")) {
+        Warn "opencode needs Node.js (npm). Install Node.js LTS first:  winget install OpenJS.NodeJS.LTS"
+        Add-InstallResult "opencode" $false
+        return
+    }
+    npm i -g opencode-ai@latest
+    $code = $LASTEXITCODE
+    Refresh-SessionPath
+    if (Test-Cmd "opencode") {
+        Success "opencode installed"
+        Add-InstallResult "opencode" $true
+    } elseif ($code -eq 0) {
+        Warn "opencode was installed but isn't on PATH yet. Open a new PowerShell window, then run: opencode"
+        Add-InstallResult "opencode" $true -Pending
+    } else {
+        Warn "opencode didn't install (npm exit code $code). Try: npm i -g opencode-ai@latest"
+        Add-InstallResult "opencode" $false
+    }
+}
+
+function Install-Crush {
+    Install-Winget "crush" "charmbracelet.crush" "crush"
 }
 
 function Install-Sovrant {
@@ -1347,6 +1406,120 @@ function Connect-Codex {
     return $true
 }
 
+function Get-XdgConfigHome {
+    if ($env:XDG_CONFIG_HOME) { $env:XDG_CONFIG_HOME } else { Join-Path $HOME ".config" }
+}
+function Get-OpenCodeConfig { Join-Path (Join-Path (Get-XdgConfigHome) "opencode") "opencode.json" }
+function Get-CrushConfig    { Join-Path (Join-Path (Get-XdgConfigHome) "crush") "crushrc" }
+
+# $false for JSONC: // or /* comments, or trailing commas, outside strings.
+# (PowerShell 7's ConvertFrom-Json accepts comments, and rewriting would drop them.)
+function Test-PlainJson($raw) {
+    $inStr = $false; $esc = $false; $lastSig = ""
+    for ($i = 0; $i -lt $raw.Length; $i++) {
+        $c = [string]$raw[$i]
+        if ($inStr) {
+            if ($esc) { $esc = $false }
+            elseif ($c -eq '\') { $esc = $true }
+            elseif ($c -eq '"') { $inStr = $false; $lastSig = '"' }
+            continue
+        }
+        if ($c -eq '"') { $inStr = $true; continue }
+        if ($c -eq '/' -and ($i + 1) -lt $raw.Length) {
+            $next = [string]$raw[$i + 1]
+            if ($next -eq '/' -or $next -eq '*') { return $false }
+        }
+        if (($c -eq '}' -or $c -eq ']') -and $lastSig -eq ',') { return $false }
+        if ($c.Trim()) { $lastSig = $c }
+    }
+    return $true
+}
+
+function Connect-OpenCode {
+    if (-not (Test-Cmd "opencode")) {
+        Warn "opencode isn't installed - skipping. Install: npm i -g opencode-ai@latest"
+        return $false
+    }
+    $cfg = Get-OpenCodeConfig
+    New-Item -ItemType Directory -Force -Path (Split-Path $cfg -Parent) | Out-Null
+    $server = [pscustomobject]@{ type = "local"; command = @("cmd", "/c", "npx", "-y", $TektMcpPkg, $TektSpaces); enabled = $true }
+    $snippet = "  `"$TektMcpName`": " + ($server | ConvertTo-Json -Compress -Depth 5)
+    $manual = {
+        Warn "Couldn't update $cfg by itself (it may contain comments). Add this under `"mcp`":"
+        Warn $snippet
+    }
+
+    $data = $null
+    if (Test-Path -LiteralPath $cfg) {
+        try { Copy-Item -LiteralPath $cfg -Destination "$cfg.bak-tekt" -Force -ErrorAction Stop }
+        catch { Warn "Couldn't back up $cfg, so it was left alone."; return $false }
+        $raw = [IO.File]::ReadAllText($cfg)
+        if ($raw.Trim()) {
+            if (-not (Test-PlainJson $raw)) { & $manual; return $false }
+            try { $data = $raw | ConvertFrom-Json -ErrorAction Stop } catch { & $manual; return $false }
+            if ($data -isnot [System.Management.Automation.PSCustomObject]) { & $manual; return $false }
+        }
+    }
+    if ($null -eq $data) { $data = [pscustomobject]@{ '$schema' = "https://opencode.ai/config.json" } }
+
+    $existing = $data.PSObject.Properties["mcp"]
+    if (-not $existing -or $null -eq $existing.Value) {
+        $data | Add-Member -NotePropertyName "mcp" -NotePropertyValue ([pscustomobject]@{}) -Force
+    } elseif ($existing.Value -isnot [System.Management.Automation.PSCustomObject]) {
+        & $manual; return $false
+    }
+    $data.mcp | Add-Member -NotePropertyName $TektMcpName -NotePropertyValue $server -Force
+
+    try {
+        [IO.File]::WriteAllText($cfg, ($data | ConvertTo-Json -Depth 20) + "`n", (New-Object System.Text.UTF8Encoding $false))
+    } catch {
+        Warn "Couldn't write $cfg. Your previous version is in $cfg.bak-tekt"
+        return $false
+    }
+    Success "opencode can use your Spaces ($cfg)"
+    return $true
+}
+
+function Connect-Crush {
+    if (-not (Test-Cmd "crush")) {
+        Warn "crush isn't installed - skipping. Install: winget install charmbracelet.crush"
+        return $false
+    }
+    $cfg   = Get-CrushConfig
+    $begin = "# >>> $TektMcpName (managed by tekt connect) >>>"
+    $end   = "# <<< $TektMcpName <<<"
+    # crushrc is Bash: inside double quotes, escape \ " $ and backtick
+    $path  = $TektSpaces -replace '([\\"$`])', '\$1'
+    New-Item -ItemType Directory -Force -Path (Split-Path $cfg -Parent) | Out-Null
+
+    $lines = [System.Collections.Generic.List[string]]::new()
+    if (Test-Path -LiteralPath $cfg) {
+        try { Copy-Item -LiteralPath $cfg -Destination "$cfg.bak-tekt" -Force -ErrorAction Stop }
+        catch { Warn "Couldn't back up $cfg, so it was left alone."; return $false }
+        # drop Tekt's previous block (begin..end markers), keep everything else
+        $skip = $false
+        foreach ($line in [IO.File]::ReadAllLines($cfg)) {
+            if (-not $skip -and $line -eq $begin) { $skip = $true; continue }
+            if ($skip) { if ($line -eq $end) { $skip = $false }; continue }
+            $lines.Add($line)
+        }
+        while ($lines.Count -gt 0 -and -not $lines[$lines.Count - 1].Trim()) { $lines.RemoveAt($lines.Count - 1) }
+    }
+    if ($lines.Count -gt 0) { $lines.Add("") }
+    $lines.Add($begin)
+    $lines.Add("mcp add $TektMcpName --command cmd --args /c --args npx --args -y --args $TektMcpPkg --args `"$path`"")
+    $lines.Add($end)
+
+    try {
+        [IO.File]::WriteAllText($cfg, (($lines -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding $false))
+    } catch {
+        Warn "Couldn't write $cfg. Your previous version is in $cfg.bak-tekt"
+        return $false
+    }
+    Success "crush can use your Spaces ($cfg)"
+    return $true
+}
+
 function Tekt-Connect($app) {
     if (-not $app) { $app = "all" }
     Section "Connect your AI to your Spaces"
@@ -1359,19 +1532,25 @@ function Tekt-Connect($app) {
         "claude-desktop" { if (Connect-ClaudeDesktop) { $connected = $true } }
         "desktop"        { if (Connect-ClaudeDesktop) { $connected = $true } }
         "codex"          { if (Connect-Codex)         { $connected = $true } }
+        "opencode"       { if (Connect-OpenCode)      { $connected = $true } }
+        "crush"          { if (Connect-Crush)         { $connected = $true } }
         "all" {
             if (Test-Cmd "claude") { if (Connect-ClaudeCode) { $connected = $true } }
             if ((Test-ClaudeDesktop) -or (Test-Path -LiteralPath (Split-Path (Get-ClaudeDesktopConfig) -Parent))) {
                 if (Connect-ClaudeDesktop) { $connected = $true }
             }
-            if (Test-Cmd "codex") { if (Connect-Codex) { $connected = $true } }
+            if (Test-Cmd "codex")    { if (Connect-Codex)    { $connected = $true } }
+            if (Test-Cmd "opencode") { if (Connect-OpenCode) { $connected = $true } }
+            if (Test-Cmd "crush")    { if (Connect-Crush)    { $connected = $true } }
         }
         default {
-            Err "Unknown AI app '$app'. Use: claude-code, claude-desktop, codex or all."
+            Err "Unknown AI app '$app'. Use: claude-code, claude-desktop, codex, opencode, crush or all."
             return
         }
     }
-    if ((Test-Cmd "claude") -or (Test-Path -LiteralPath (Join-Path $HOME ".claude"))) {
+    # Skills are a Claude Code feature: only (re)link them when connecting Claude Code (or all)
+    $forClaudeCode = @("all", "claude-code", "claude", "code") -contains ([string]$app).ToLowerInvariant()
+    if ($forClaudeCode -and ((Test-Cmd "claude") -or (Test-Path -LiteralPath (Join-Path $HOME ".claude")))) {
         Link-SpaceSkills
         Success "Shared skills from your Spaces are linked into Claude Code ($TektClaudeSkills)"
     }
@@ -1379,7 +1558,7 @@ function Tekt-Connect($app) {
         Warn "Your AI apps start the Spaces server with npx, which comes with Node.js. Install it first:  winget install OpenJS.NodeJS.LTS"
     }
     Write-Host ""
-    if (-not $connected) { Warn "No AI app connected yet. Tekt connects Claude Code, Claude Desktop and Codex." }
+    if (-not $connected) { Warn "No AI app connected yet. Tekt connects Claude Code, Claude Desktop, Codex, opencode and crush." }
     Log "Other MCP apps: add a server with  command: cmd   args: /c npx -y $TektMcpPkg $TektSpaces"
     Log "Running MCPHub (tekt mcp)? Apps can also use http://localhost:3000/mcp - it serves /spaces too."
     Log "Try it: ask your AI `"What's in my team Space?`""
@@ -1407,7 +1586,10 @@ function Tekt-Status {
         @("Tekt.Iris", "OpenClaw",    "openclaw"),
         @("Tekt.Iris", "PicoClaw",    "picoclaw"),
         @("Tekt.Iris", "ZeroClaw",    "zeroclaw"),
-        @("Tekt.Iris", "Nanobot",     "nanobot")
+        @("Tekt.Iris", "Nanobot",     "nanobot"),
+        @("Tekt.Iris", "Codex CLI",   "codex"),
+        @("Tekt.Iris", "opencode",    "opencode"),
+        @("Tekt.Iris", "crush",       "crush")
     )
     $installed = 0; $missing = 0
     foreach ($r in $rows) {
@@ -1474,6 +1656,14 @@ function Tekt-Status {
     if ((Test-Path -LiteralPath $codexToml) -and (Select-String -LiteralPath $codexToml -Pattern ('^\[mcp_servers\.' + [regex]::Escape($TektMcpName) + '\]') -Quiet)) {
         Write-Host ("  [OK]  {0,-16} uses your Spaces" -f "Codex") -ForegroundColor Green; $capps++
     }
+    $ocJson  = Get-OpenCodeConfig
+    $crushRc = Get-CrushConfig
+    if ((Test-Path -LiteralPath $ocJson) -and (Select-String -LiteralPath $ocJson -SimpleMatch "`"$TektMcpName`"" -Quiet)) {
+        Write-Host ("  [OK]  {0,-16} uses your Spaces" -f "opencode") -ForegroundColor Green; $capps++
+    }
+    if ((Test-Path -LiteralPath $crushRc) -and (Select-String -LiteralPath $crushRc -SimpleMatch "mcp add $TektMcpName" -Quiet)) {
+        Write-Host ("  [OK]  {0,-16} uses your Spaces" -f "crush") -ForegroundColor Green; $capps++
+    }
     if ($capps -eq 0) { Write-Host "  [ ?]  None yet - tekt connect" -ForegroundColor Yellow }
     Write-Host "`n  $installed installed / $missing missing`n"
     if ($missing -gt 0) { Log "Run '.\install.ps1' to install everything." }
@@ -1516,6 +1706,9 @@ function Main {
     Install-ZeroClaw
     Install-Nanobot
     Install-NanoClaw
+    Install-Codex
+    Install-OpenCode
+    Install-Crush
     Section "Hermes Agent"
     Warn "Hermes has no native Windows build - use WSL2: wsl --install, then bash install.sh"
     # Tekt.Cloud
@@ -1587,7 +1780,7 @@ switch ($Command) {
         Write-Host "  space remove <name>                   Disconnect a Space (your files are kept)"
         Write-Host "  space autosync on|off                 Sync every 10 minutes in the background"
         Write-Host ""
-        Write-Host "  connect [app]  Let your AI apps use your Spaces: all (default), claude-code, claude-desktop, codex"
+        Write-Host "  connect [app]  Let your AI apps use your Spaces: all (default), claude-code, claude-desktop, codex, opencode, crush"
         Write-Host ""
         Write-Host "Shared skills: skills in a Space appear in everyone's Claude Code"
         Write-Host "  skill list                            Skills shared in your Spaces, and which are in Claude Code"

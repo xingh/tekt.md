@@ -1725,6 +1725,68 @@ space_autosync() {
 }
 
 # =============================================================================
+# More AI apps — Codex CLI (OpenAI), opencode, crush (Charm)
+# =============================================================================
+install_codex() {
+  section "Codex CLI (OpenAI)"
+  if command_exists codex; then success "Codex CLI already installed — $(codex --version 2>/dev/null | head -1)"; return 0; fi
+  if [ "$(os_type)" = macos ] && command_exists brew; then
+    brew install --cask codex --quiet || true
+  elif command_exists npm; then
+    npm install -g @openai/codex --silent || true
+  else
+    curl -fsSL https://chatgpt.com/codex/install.sh | sh || true
+  fi
+  reload_path
+  if command_exists codex; then
+    success "Codex CLI installed — sign in with: codex login"
+  else
+    warn "Codex CLI didn't install. Try: npm install -g @openai/codex"
+    return 1
+  fi
+}
+
+install_opencode() {
+  section "opencode"
+  if command_exists opencode; then success "opencode already installed"; return 0; fi
+  if [ "$(os_type)" = macos ] && command_exists brew; then
+    brew install anomalyco/tap/opencode --quiet || true
+  elif command_exists npm; then
+    npm install -g opencode-ai@latest --silent || true
+  else
+    warn "opencode needs Node.js (npm). Install it first:  tekt install"
+    return 1
+  fi
+  reload_path
+  if command_exists opencode; then
+    success "opencode installed"
+  else
+    warn "opencode didn't install. Try: npm i -g opencode-ai@latest"
+    return 1
+  fi
+}
+
+install_crush() {
+  section "crush (Charm)"
+  if command_exists crush; then success "crush already installed"; return 0; fi
+  if command_exists brew; then
+    brew install charmbracelet/tap/crush --quiet || true
+  elif command_exists npm; then
+    npm install -g @charmland/crush --silent || true
+  else
+    warn "crush needs Homebrew or Node.js (npm)."
+    return 1
+  fi
+  reload_path
+  if command_exists crush; then
+    success "crush installed"
+  else
+    warn "crush didn't install. Try: npm install -g @charmland/crush"
+    return 1
+  fi
+}
+
+# =============================================================================
 # Connect — let your AI apps use your Spaces (tekt connect [app])
 # Registers the MCP filesystem server, scoped to ~/Tekt/Spaces, with each AI
 # app on this computer: Claude Code, Claude Desktop, Codex. Re-running replaces
@@ -1813,6 +1875,59 @@ connect_codex() {
   success "Codex can use your Spaces ($cfg)"
 }
 
+opencode_config() { echo "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/opencode.json"; }
+crush_config()    { echo "${XDG_CONFIG_HOME:-$HOME/.config}/crush/crushrc"; }
+
+connect_opencode() {
+  if ! command_exists opencode; then
+    warn "opencode isn't installed — skipping. Install: npm i -g opencode-ai@latest"
+    return 1
+  fi
+  local cfg; cfg="$(opencode_config)"
+  mkdir -p "$(dirname "$cfg")"
+  if [ -f "$cfg" ]; then cp "$cfg" "$cfg.bak-tekt"; fi
+  if command_exists python3 && python3 - "$cfg" "$TEKT_MCP_NAME" "$TEKT_MCP_PKG" "$TEKT_SPACES" <<'PY'
+import json, os, sys
+path, name, pkg, spaces = sys.argv[1:5]
+data = {"$schema": "https://opencode.ai/config.json"}
+if os.path.exists(path) and os.path.getsize(path) > 0:
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)   # a JSONC file with comments fails here and is left alone
+data.setdefault("mcp", {})[name] = {"type": "local", "command": ["npx", "-y", pkg, spaces], "enabled": True}
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+PY
+  then
+    success "opencode can use your Spaces ($cfg)"
+  else
+    warn "Couldn't update $cfg by itself (it may contain comments). Add this under \"mcp\":"
+    warn "  \"$TEKT_MCP_NAME\": { \"type\": \"local\", \"command\": [\"npx\", \"-y\", \"$TEKT_MCP_PKG\", \"$TEKT_SPACES\"], \"enabled\": true }"
+    return 1
+  fi
+}
+
+connect_crush() {
+  if ! command_exists crush; then
+    warn "crush isn't installed — skipping. Install: npm install -g @charmland/crush"
+    return 1
+  fi
+  local cfg begin end path
+  cfg="$(crush_config)"
+  begin="# >>> $TEKT_MCP_NAME (managed by tekt connect) >>>"
+  end="# <<< $TEKT_MCP_NAME <<<"
+  path="$(printf '%s' "$TEKT_SPACES" | sed 's/[\\"$`]/\\&/g')"   # crushrc is Bash: escape for double quotes
+  mkdir -p "$(dirname "$cfg")"
+  if [ -f "$cfg" ]; then
+    cp "$cfg" "$cfg.bak-tekt"
+    awk -v b="$begin" -v e="$end" '$0 == b { skip = 1; next } skip && $0 == e { skip = 0; next } !skip' "$cfg.bak-tekt" \
+      | awk 'NF { while (n > 0) { print ""; n-- } print; next } { n++ }' > "$cfg"
+  fi
+  printf '\n%s\nmcp add %s --command npx --args -y --args %s --args "%s"\n%s\n' \
+    "$begin" "$TEKT_MCP_NAME" "$TEKT_MCP_PKG" "$path" "$end" >> "$cfg"
+  success "crush can use your Spaces ($cfg)"
+}
+
 tekt_connect() {
   local app="${1:-all}" connected=0
   section "Connect your AI to your Spaces"
@@ -1821,25 +1936,33 @@ tekt_connect() {
     claude-code|claude|code) connect_claude_code    && connected=1 ;;
     claude-desktop|desktop)  connect_claude_desktop && connected=1 ;;
     codex)                   connect_codex          && connected=1 ;;
+    opencode)                connect_opencode       && connected=1 ;;
+    crush)                   connect_crush          && connected=1 ;;
     all)
       if command_exists claude; then connect_claude_code && connected=1; fi
       if claude_desktop_installed || [ -d "$(dirname "$(claude_desktop_config)")" ]; then
         connect_claude_desktop && connected=1
       fi
       if command_exists codex; then connect_codex && connected=1; fi
+      if command_exists opencode; then connect_opencode && connected=1; fi
+      if command_exists crush; then connect_crush && connected=1; fi
       ;;
-    *) error "Unknown AI app '$app'. Use: claude-code, claude-desktop, codex or all."; return 1 ;;
+    *) error "Unknown AI app '$app'. Use: claude-code, claude-desktop, codex, opencode, crush or all."; return 1 ;;
   esac
-  if command_exists claude || [ -d "$HOME/.claude" ]; then
-    space_link_skills
-    success "Shared skills from your Spaces are linked into Claude Code ($TEKT_CLAUDE_SKILLS)"
-  fi
+  case "$app" in
+    all|claude-code|claude|code)   # shared skills only concern Claude Code
+      if command_exists claude || [ -d "$HOME/.claude" ]; then
+        space_link_skills
+        success "Shared skills from your Spaces are linked into Claude Code ($TEKT_CLAUDE_SKILLS)"
+      fi
+      ;;
+  esac
   if ! command_exists npx; then
     warn "Your AI apps start the Spaces server with npx, which comes with Node.js. Install it first:  tekt install"
   fi
   echo ""
   if [ "$connected" -eq 0 ]; then
-    warn "No AI app connected yet. Tekt connects Claude Code, Claude Desktop and Codex."
+    warn "No AI app connected yet. Tekt connects Claude Code, Claude Desktop, Codex, opencode and crush."
   fi
   log "Other MCP apps: add a server with  command: npx   args: -y $TEKT_MCP_PKG $TEKT_SPACES"
   log "Running MCPHub (tekt mcp)? Apps can also use http://localhost:3000/mcp — it serves /spaces too."
@@ -2065,7 +2188,8 @@ Share with your AI and your people
   space remove <name>                  Disconnect a Space (keeps every file)
   space autosync on|off                Sync every 10 minutes in the background
   connect [app]                        Let your AI apps use your Spaces
-                                       (app: claude-code, claude-desktop, codex; default: every one found)
+                                       (app: claude-code, claude-desktop, codex, opencode, crush;
+                                        default: every one found)
   skill list                           Skills shared in your Spaces, and which are in Claude Code
   skill new <space> <name>             Start a skill in a Space; everyone gets it after sync
   skill link                           Re-link shared skills into Claude Code
@@ -2153,6 +2277,9 @@ print_summary() {
   check "Hermes Agent"    hermes
   check "ZeroClaw"        zeroclaw
   check "Nanobot"         nanobot
+  check "Codex CLI"       codex
+  check "opencode"        opencode
+  check "crush"           crush
 
   echo ""
   log "Staged (tekt.cloud): MCPHub/LibreChat/n8n/Sovrant — bring up with:"
@@ -2269,6 +2396,9 @@ tekt_status() {
   check_tool "Hermes Agent"    hermes    iris
   check_tool "ZeroClaw"        zeroclaw  iris
   check_tool "Nanobot"         nanobot   iris
+  check_tool "Codex CLI"       codex     iris
+  check_tool "opencode"        opencode  iris
+  check_tool "crush"           crush     iris
   if [ -d "$TEKT_AGENTS_DIR/nanoclaw/.git" ]; then
     printf "  ${GREEN}✓${RESET}  %-18s %s\n" "NanoClaw" "staged at $TEKT_AGENTS_DIR/nanoclaw"
   else
@@ -2331,6 +2461,12 @@ tekt_status() {
   fi
   if grep -q "^\[mcp_servers\.$TEKT_MCP_NAME\]" "$(codex_config)" 2>/dev/null; then
     printf "  ${GREEN}✓${RESET}  %-18s %s\n" "Codex" "uses your Spaces"; capps=1
+  fi
+  if grep -q "\"$TEKT_MCP_NAME\"" "$(opencode_config)" 2>/dev/null; then
+    printf "  ${GREEN}✓${RESET}  %-18s %s\n" "opencode" "uses your Spaces"; capps=1
+  fi
+  if grep -q "^mcp add $TEKT_MCP_NAME " "$(crush_config)" 2>/dev/null; then
+    printf "  ${GREEN}✓${RESET}  %-18s %s\n" "crush" "uses your Spaces"; capps=1
   fi
   if [ "$capps" -eq 0 ]; then printf "  ${YELLOW}?${RESET}  %-18s %s\n" "None yet" "tekt connect"; fi
 
@@ -2414,6 +2550,9 @@ main() {
   install_zeroclaw      || warn "ZeroClaw install failed — continuing..."
   install_nanobot       || warn "Nanobot install failed — continuing..."
   install_nanoclaw      || warn "NanoClaw staging failed — continuing..."
+  install_codex         || warn "Codex CLI install failed — continuing..."
+  install_opencode      || warn "opencode install failed — continuing..."
+  install_crush         || warn "crush install failed — continuing..."
 
   # ── Tekt.Cloud (staged — start with `install.sh mcp` / `install.sh ui`) ──
   install_dotnet        || warn ".NET SDK install skipped — continuing..."

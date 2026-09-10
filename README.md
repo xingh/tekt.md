@@ -194,6 +194,9 @@ Five documents take you from composition to a shared, working home-lab stack:
 | ZeroClaw | Rust runtime, <5MB RAM, ~10ms cold start | zeroclaw-labs contributors |
 | Nanobot | Ultra-light Python agent with WebUI & MCP | HKUDS (MIT) |
 | NanoClaw | Container-isolated agents on the Claude Agent SDK (staged; setup via Claude Code) | qwibitai (MIT) |
+| Codex CLI | OpenAI's coding agent in the terminal | OpenAI (Apache-2.0) |
+| opencode | Open-source terminal coding agent for any provider | anomalyco & contributors (MIT) |
+| crush | Charm's terminal AI assistant | Charm (FSL-1.1-MIT) |
 
 OpenClaw onboarding is intentionally deferred during bootstrap to keep install non-interruptive: run `openclaw onboard --install-daemon` when ready.  
 On Windows, restart PowerShell after installer runs, then verify with `.\install.ps1 status`.
