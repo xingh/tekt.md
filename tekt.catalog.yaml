@@ -178,7 +178,8 @@ layers:
         docs: https://claude.ai/download
         install_macos: "brew install --cask claude"
         install_windows: "winget install --id Anthropic.Claude -e"
-        note: "Desktop companion app; command detection may vary by platform."
+        install_linux: "Anthropic apt repo (Ubuntu 22.04+ / Debian 12+, beta): apt install claude-desktop"
+        note: "Desktop app for Claude. On Linux it's a beta for Ubuntu and Debian; Tekt checks Anthropic's key fingerprint before adding the repo."
       - name: Zed (Agent mode)
         cmd: zed
         upstream: "Zed Industries"

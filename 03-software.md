@@ -62,7 +62,19 @@ brew install --cask claude
 # Windows: winget install --id Anthropic.Claude -e
 ```
 
-Download: [claude.ai/download](https://claude.ai/download)
+**Linux (beta).** Anthropic publishes Claude Desktop for Ubuntu 22.04+ and Debian 12+ (x86_64 and arm64) from its own apt repository. Tekt adds that repository and installs `claude-desktop` for you. It refuses the signing key unless its fingerprint is `31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE`. By hand:
+
+```bash
+sudo apt install curl gnupg
+sudo curl -fsSLo /usr/share/keyrings/claude-desktop-archive-keyring.asc https://downloads.claude.ai/claude-desktop/key.asc
+gpg --show-keys /usr/share/keyrings/claude-desktop-archive-keyring.asc   # check the fingerprint above
+echo "deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/claude-desktop-archive-keyring.asc] https://downloads.claude.ai/claude-desktop/apt/stable stable main" | sudo tee /etc/apt/sources.list.d/claude-desktop.list
+sudo apt update && sudo apt install claude-desktop
+```
+
+On Linux, sign in with your claude.ai account; the desktop app doesn't take an API key. Computer Use and dictation aren't in the Linux beta yet. Cowork needs virtualization access (`sudo usermod -aG kvm $USER`, then log out and back in). Fedora, Arch and other non-Debian distributions don't have a desktop build yet, so use `claude` in the terminal there.
+
+Download: [claude.ai/download](https://claude.ai/download) · Linux guide: [code.claude.com/docs/en/desktop-linux](https://code.claude.com/docs/en/desktop-linux)
 
 ### Zed (Agent mode) — Zed Industries
 

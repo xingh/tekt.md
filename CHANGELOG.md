@@ -8,6 +8,12 @@ permalink: /changelog/index.html
 
 # Changelog
 
+## v0.10.0 — Claude Desktop everywhere
+
+- **Official Claude Desktop on Linux** (#24). On Ubuntu 22.04+ and Debian 12+ (x86_64 and arm64) with a desktop, Tekt adds Anthropic's apt repository and installs `claude-desktop`, so updates come with your normal system updates. It refuses the signing key unless the fingerprint matches Anthropic's (`31DDDE24…BAA929FF1A7ECACE`). Other distributions and servers are pointed to `claude` in the terminal.
+- **Windows reports Claude Desktop honestly** (#25). The install is judged by winget's exit code and by finding the app, the same way as every other Windows install since v0.5.0. Tekt now also finds the per-user install under `AnthropicClaude`.
+- `tekt connect claude-desktop` and `tekt status` recognize the Linux app.
+
 ## v0.9.0 — Skill shelf
 
 Getting a good skill is one command, and it lands where your colleagues get it too (#46).
