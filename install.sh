@@ -1545,6 +1545,7 @@ space_sync() {
       space_set_meta "$dir" initialized 1
       space_set_meta "$dir" last_sync "$(space_now)"
       success "$name is up to date"
+      space_link_skills "$name"
     else
       rc=1
       warn "$name didn't sync. If it keeps failing, reset it with:  rclone bisync $remote:$folder $dir --resync"
@@ -1583,6 +1584,7 @@ space_remove() {
   remote="$(space_meta "$dir" remote)"
   rclone config delete "$remote" 2>/dev/null || true
   mv "$dir/.tekt-space" "$dir/.tekt-space.removed"
+  space_link_skills "$name"   # its skills leave Claude Code
   success "Disconnected '$name'. Your files stay in $dir and in the cloud folder; nothing was deleted."
 }
 
@@ -1707,6 +1709,10 @@ tekt_connect() {
       ;;
     *) error "Unknown AI app '$app'. Use: claude-code, claude-desktop, codex or all."; return 1 ;;
   esac
+  if command_exists claude || [ -d "$HOME/.claude" ]; then
+    space_link_skills
+    success "Shared skills from your Spaces are linked into Claude Code ($TEKT_CLAUDE_SKILLS)"
+  fi
   if ! command_exists npx; then
     warn "Your AI apps start the Spaces server with npx, which comes with Node.js. Install it first:  tekt install"
   fi
@@ -1717,6 +1723,110 @@ tekt_connect() {
   log "Other MCP apps: add a server with  command: npx   args: -y $TEKT_MCP_PKG $TEKT_SPACES"
   log "Running MCPHub (tekt mcp)? Apps can also use http://localhost:3000/mcp — it serves /spaces too."
   log "Try it: ask your AI \"What's in my team Space?\""
+}
+
+# =============================================================================
+# Shared skills — skills in a Space appear in everyone's Claude Code
+# (tekt skill list | new <space> <name> | link)
+# Links ~/Tekt/Spaces/<space>/skills/<skill>/ into ~/.claude/skills/<space>--<skill>.
+# Tekt only ever touches links that point into your Spaces folder.
+# =============================================================================
+TEKT_CLAUDE_SKILLS="${TEKT_CLAUDE_SKILLS:-$HOME/.claude/skills}"
+
+skill_owned_link() {   # true if $1 is a symlink that points into the Spaces folder
+  [ -L "$1" ] || return 1
+  case "$(readlink "$1")" in
+    "$TEKT_SPACES"/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+space_link_skills() {  # space_link_skills [space] — link one Space's skills, or every Space's
+  local only="${1:-}" link target tspace sdir name skill
+  mkdir -p "$TEKT_CLAUDE_SKILLS"
+  # Drop Tekt's links whose skill is gone, or whose Space was disconnected.
+  for link in "$TEKT_CLAUDE_SKILLS"/*--*; do
+    if ! skill_owned_link "$link"; then continue; fi
+    if [ -n "$only" ]; then
+      case "$(basename "$link")" in "$only"--*) ;; *) continue ;; esac
+    fi
+    target="$(readlink "$link")"
+    tspace="${target#"$TEKT_SPACES"/}"; tspace="${tspace%%/*}"
+    if [ ! -f "$target/SKILL.md" ] || [ ! -f "$TEKT_SPACES/$tspace/.tekt-space" ]; then rm -f "$link"; fi
+  done
+  for sdir in "$TEKT_SPACES"/*/; do
+    sdir="${sdir%/}"
+    [ -f "$sdir/.tekt-space" ] || continue
+    name="$(basename "$sdir")"
+    if [ -n "$only" ] && [ "$only" != "$name" ]; then continue; fi
+    for skill in "$sdir"/skills/*/; do
+      skill="${skill%/}"
+      [ -f "$skill/SKILL.md" ] || continue
+      link="$TEKT_CLAUDE_SKILLS/$name--$(basename "$skill")"
+      if [ -e "$link" ] && ! skill_owned_link "$link"; then
+        warn "Skipping $(basename "$link"): something else already lives at $link"
+        continue
+      fi
+      ln -sfn "$skill" "$link"
+    done
+  done
+  return 0
+}
+
+skill_list() {
+  section "Shared skills"
+  local sdir name skill link desc mark found=0
+  for sdir in "$TEKT_SPACES"/*/; do
+    sdir="${sdir%/}"
+    [ -f "$sdir/.tekt-space" ] || continue
+    name="$(basename "$sdir")"
+    for skill in "$sdir"/skills/*/; do
+      skill="${skill%/}"
+      [ -f "$skill/SKILL.md" ] || continue
+      found=1
+      link="$TEKT_CLAUDE_SKILLS/$name--$(basename "$skill")"
+      desc="$(sed -n '/^description:/{s/^description:[[:space:]]*//p;q;}' "$skill/SKILL.md")"
+      if skill_owned_link "$link"; then mark="${GREEN}●${RESET}"; else mark="${YELLOW}○${RESET}"; fi
+      printf "  %b %-28s %s\n" "$mark" "$name/$(basename "$skill")" "${desc:-(no description)}"
+    done
+  done
+  if [ "$found" -eq 0 ]; then
+    log "No shared skills yet. Make one:  tekt skill new team summarize"
+  else
+    log "● in Claude Code (~/.claude/skills)   ○ not linked yet — run: tekt skill link"
+  fi
+}
+
+skill_new() {
+  local space="${1:-}" name="${2:-}" dir
+  if [ -z "$space" ] || [ -z "$name" ]; then error "Usage:  tekt skill new <space> <skill-name>"; return 1; fi
+  if [ ! -f "$TEKT_SPACES/$space/.tekt-space" ]; then error "No Space named '$space'. See:  tekt space list"; return 1; fi
+  name="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9-' '-' | sed 's/^-*//; s/-*$//')"
+  if [ -z "$name" ]; then error "Give the skill a name, e.g.  tekt skill new $space summarize"; return 1; fi
+  dir="$TEKT_SPACES/$space/skills/$name"
+  if [ -f "$dir/SKILL.md" ]; then warn "Skill '$name' already exists: $dir/SKILL.md"; return 0; fi
+  mkdir -p "$dir"
+  cat > "$dir/SKILL.md" <<EOF
+---
+name: $name
+description: One line: what this skill does and when to use it.
+---
+
+# $name
+
+## When to use
+- Describe the situations where an AI should reach for this skill.
+
+## Steps
+1. First step.
+2. Next step.
+
+## Notes
+- Anything the AI should know: sources, tone, formats, pitfalls.
+EOF
+  space_link_skills "$space"
+  success "New skill: $dir/SKILL.md"
+  log "Edit it, then run  tekt space sync $space  — everyone in the Space gets it."
 }
 
 # The tekt command: a copy of this script on your PATH (tekt space …, tekt status)
@@ -1749,6 +1859,9 @@ Share with your AI and your people
   space autosync on|off                Sync every 10 minutes in the background
   connect [app]                        Let your AI apps use your Spaces
                                        (app: claude-code, claude-desktop, codex; default: every one found)
+  skill list                           Skills shared in your Spaces, and which are in Claude Code
+  skill new <space> <name>             Start a skill in a Space; everyone gets it after sync
+  skill link                           Re-link shared skills into Claude Code
 
 Set up and check
   install        Install all Tekt tools (what the one-line installer runs)
@@ -1981,6 +2094,16 @@ tekt_status() {
     printf "  ${GREEN}✓${RESET}  %-18s %s\n" "$(basename "$sdir")" "last sync ${slast:-never} — $sdir"
   done
   if [ "$sfound" -eq 0 ]; then printf "  ${YELLOW}?${RESET}  %-18s %s\n" "No Spaces yet" "tekt space add team drive"; fi
+  local sk sk_total=0 sk_linked=0
+  for sk in "$TEKT_SPACES"/*/skills/*/SKILL.md; do
+    if [ -f "$sk" ] && [ -f "$(dirname "$(dirname "$(dirname "$sk")")")/.tekt-space" ]; then sk_total=$((sk_total + 1)); fi
+  done
+  for sk in "$TEKT_CLAUDE_SKILLS"/*--*; do
+    if skill_owned_link "$sk"; then sk_linked=$((sk_linked + 1)); fi
+  done
+  if [ "$sk_total" -gt 0 ]; then
+    printf "  ${GREEN}✓${RESET}  %-18s %s\n" "Shared skills" "$sk_linked of $sk_total linked into Claude Code"
+  fi
 
   echo ""
   echo -e "${BOLD}AI apps connected to your Spaces${RESET}"
@@ -2127,6 +2250,15 @@ case "${1:-}" in
     ;;
   connect)
     tekt_connect "${2:-all}"
+    ;;
+  skill|skills)
+    shift
+    case "${1:-list}" in
+      list|ls) skill_list ;;
+      new)     skill_new "${2:-}" "${3:-}" ;;
+      link)    space_link_skills && success "Shared skills linked into Claude Code ($TEKT_CLAUDE_SKILLS)" ;;
+      *) error "Unknown: skill ${1} — use list, new or link"; exit 1 ;;
+    esac
     ;;
   install)
     main

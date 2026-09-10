@@ -28,6 +28,11 @@
 # Connect - let your AI apps use your Spaces (MCP filesystem server "tekt-spaces"):
 #         tekt connect [app]    # all (default), claude-code, claude-desktop, codex
 #
+# Shared skills - skills in a Space appear in everyone's Claude Code:
+#         tekt skill list                 # skills in your Spaces, and which are linked
+#         tekt skill new <space> <name>   # start a skill; everyone gets it after sync
+#         tekt skill link                 # re-link shared skills into Claude Code
+#
 # One-liner: irm https://tekt.md/install.ps1 | iex
 # Tip: for the full Linux-parity experience, install WSL2 (wsl --install)
 #      and run `bash install.sh` inside it.
@@ -81,6 +86,7 @@ $TektBin       = Join-Path $HOME ".local\bin"
 $TektCliPs1    = Join-Path $TektBin "tekt.ps1"
 $TektMcpName   = "tekt-spaces"
 $TektMcpPkg    = "@modelcontextprotocol/server-filesystem"
+$TektClaudeSkills = if ($env:TEKT_CLAUDE_SKILLS) { $env:TEKT_CLAUDE_SKILLS } else { Join-Path (Join-Path $HOME ".claude") "skills" }
 $EmDash        = [string][char]0x2014   # built from char codes so the file parses the same under any encoding
 $MidDot        = [string][char]0x00B7
 
@@ -709,6 +715,7 @@ function Space-Sync($only) {
             Set-SpaceMeta $dir "initialized" "1"
             Set-SpaceMeta $dir "last_sync" (Get-UtcNow)
             Success "$name is up to date"
+            Link-SpaceSkills $name
         } else {
             Warn "$name didn't sync. If it keeps failing, reset it with: rclone bisync ${remote}:$folder `"$dir`" --resync"
         }
@@ -743,6 +750,7 @@ function Space-Remove($rawName) {
     if (-not (Test-Path -LiteralPath $meta)) { Err "No Space named '$name'. See: tekt space list"; return }
     if (Test-Cmd "rclone") { & rclone config delete "tekt-$name" 2>$null | Out-Null }
     Move-Item -LiteralPath $meta -Destination (Join-Path $dir ".tekt-space.removed") -Force -ErrorAction SilentlyContinue
+    Link-SpaceSkills $name   # its skills leave Claude Code
     Success "Disconnected '$name'. Your files stay in $dir and in the cloud folder; nothing was deleted."
 }
 
@@ -790,6 +798,177 @@ function Space-Help {
     Write-Host "  sync [name]                     Two-way sync now (all Spaces, or just one)"
     Write-Host "  remove <name>                   Disconnect a Space (your files are kept)"
     Write-Host "  autosync on|off                 Sync every 10 minutes in the background"
+}
+
+# -- Shared skills: skills in a Space appear in everyone's Claude Code ----------
+# (tekt skill list | new <space> <name> | link)
+# Links $TektSpaces\<space>\skills\<skill>\ into $TektClaudeSkills\<space>--<skill>
+# as a directory junction (no admin rights needed). Tekt only ever touches links
+# whose target is inside the Spaces folder - never real folders or other links.
+
+# Target of a junction/symlink as a full path, or $null for anything that isn't a link.
+# PowerShell 5.1 returns .Target as an array, 7 as a string; .LinkTarget is .NET 6+.
+function Get-SkillLinkTarget($path) {
+    try { $item = Get-Item -LiteralPath $path -Force -ErrorAction Stop } catch { return $null }
+    if (-not $item.LinkType) { return $null }
+    $t = $item.Target
+    if (-not $t -and $item.PSObject.Properties["LinkTarget"]) { $t = $item.LinkTarget }
+    $t = [string](@($t) | Select-Object -First 1)
+    if (-not $t) { return $null }
+    $t = $t -replace '^\\\\\?\\', '' -replace '^\\\?\?\\', ''   # strip \\?\ or \??\ prefixes
+    if (-not [IO.Path]::IsPathRooted($t)) { $t = Join-Path (Split-Path $path -Parent) $t }
+    return [IO.Path]::GetFullPath($t)
+}
+
+function Get-SpacesRootFull {
+    [IO.Path]::GetFullPath($TektSpaces).TrimEnd('\', '/')
+}
+
+function Test-SkillOwnedLink($path) {   # true if $path is a link that points into the Spaces folder
+    $t = Get-SkillLinkTarget $path
+    if (-not $t) { return $false }
+    $root = Get-SpacesRootFull
+    return $t.StartsWith($root + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)
+}
+
+# Remove only the link itself - never Remove-Item -Recurse, which would follow it
+# and delete the skill it points to.
+function Remove-SkillLink($path) {
+    try { [IO.Directory]::Delete($path); return } catch { }
+    try { [IO.File]::Delete($path) }   # a Unix symlink (the Linux test fallback)
+    catch { Warn "Couldn't remove the old link $path" }
+}
+
+# Don't trust "no exception" alone: on non-Windows pwsh a piped junction attempt can fail
+# silently, so check after each attempt that a link to the target really exists.
+function New-SkillLink($link, $target) {
+    try { $null = New-Item -ItemType Junction -Path $link -Target $target -ErrorAction Stop } catch { }
+    if (Get-SkillLinkTarget $link) { return }
+    # A failed junction must not leave an empty real folder in the way (non-recursive: only if empty)
+    if (Test-Path -LiteralPath $link) { try { [IO.Directory]::Delete($link) } catch { } }
+    # Fallback for testing under PowerShell on Linux/macOS, where junctions don't exist
+    $why = ""
+    try { $null = New-Item -ItemType SymbolicLink -Path $link -Target $target -ErrorAction Stop }
+    catch { $why = " ($($_.Exception.Message))" }
+    if (Get-SkillLinkTarget $link) { return }
+    Warn "Couldn't link $(Split-Path $link -Leaf) into Claude Code$why"
+}
+
+# Skill folders (with a SKILL.md) inside one Space folder
+function Get-SpaceSkillDirs($spaceDir) {
+    $skillsDir = Join-Path $spaceDir "skills"
+    if (-not (Test-Path -LiteralPath $skillsDir)) { return }
+    Get-ChildItem -LiteralPath $skillsDir -Directory -ErrorAction SilentlyContinue |
+        Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "SKILL.md") }
+}
+
+function Link-SpaceSkills($only) {   # link one Space's skills, or every Space's
+    New-Item -ItemType Directory -Force -Path $TektClaudeSkills | Out-Null
+    if (-not (Test-Path -LiteralPath $TektClaudeSkills)) { Warn "Couldn't create $TektClaudeSkills"; return }
+    $root = Get-SpacesRootFull
+
+    # Drop Tekt's links whose skill is gone, or whose Space was disconnected.
+    foreach ($link in @([IO.Directory]::GetFileSystemEntries($TektClaudeSkills, "*--*"))) {
+        if (-not (Test-SkillOwnedLink $link)) { continue }
+        if ($only -and -not (Split-Path $link -Leaf).StartsWith("$only--")) { continue }
+        $target = Get-SkillLinkTarget $link
+        $tspace = ($target.Substring($root.Length + 1) -split '[\\/]')[0]
+        $spaceMeta = Join-Path (Join-Path $TektSpaces $tspace) ".tekt-space"
+        if (-not (Test-Path -LiteralPath (Join-Path $target "SKILL.md")) -or -not (Test-Path -LiteralPath $spaceMeta)) {
+            Remove-SkillLink $link
+        }
+    }
+
+    foreach ($sdir in @(Get-SpaceDirs)) {
+        $name = Split-Path $sdir -Leaf
+        if ($only -and $only -ne $name) { continue }
+        foreach ($skill in @(Get-SpaceSkillDirs $sdir)) {
+            $link = Join-Path $TektClaudeSkills "$name--$($skill.Name)"
+            if (Test-SkillOwnedLink $link) {
+                if ((Get-SkillLinkTarget $link) -eq [IO.Path]::GetFullPath($skill.FullName)) { continue }   # already right
+                Remove-SkillLink $link
+            } elseif ((Test-Path -LiteralPath $link) -or (Get-SkillLinkTarget $link)) {
+                Warn "Skipping $name--$($skill.Name): something else already lives at $link"
+                continue
+            }
+            New-SkillLink $link $skill.FullName
+        }
+    }
+}
+
+function Skill-List {
+    Section "Shared skills"
+    $found = $false
+    foreach ($sdir in @(Get-SpaceDirs)) {
+        $name = Split-Path $sdir -Leaf
+        foreach ($skill in @(Get-SpaceSkillDirs $sdir)) {
+            $found = $true
+            $md   = Join-Path $skill.FullName "SKILL.md"
+            $link = Join-Path $TektClaudeSkills "$name--$($skill.Name)"
+            $desc = ""
+            foreach ($line in [IO.File]::ReadAllLines($md)) {
+                if ($line -match '^description:\s*(.*)$') { $desc = $Matches[1].Trim(); break }
+            }
+            if (-not $desc) { $desc = "(no description)" }
+            if (Test-SkillOwnedLink $link) { Write-Host "  * " -ForegroundColor Green -NoNewline }
+            else                           { Write-Host "  o " -ForegroundColor Yellow -NoNewline }
+            Write-Host ("{0,-28} {1}" -f "$name/$($skill.Name)", $desc)
+        }
+    }
+    if (-not $found) { Log "No shared skills yet. Make one:  tekt skill new team summarize" }
+    else             { Log "* in Claude Code ($TektClaudeSkills)   o not linked yet - run: tekt skill link" }
+}
+
+function Skill-New($rawSpace, $rawName) {
+    if (-not $rawSpace -or -not $rawName) { Err "Usage:  tekt skill new <space> <skill-name>"; return }
+    $space = ConvertTo-SpaceName $rawSpace
+    $sdir  = Join-Path $TektSpaces $space
+    if (-not $space -or -not (Test-Path -LiteralPath (Join-Path $sdir ".tekt-space"))) {
+        Err "No Space named '$rawSpace'. See:  tekt space list"; return
+    }
+    $name = ConvertTo-SpaceName $rawName
+    if (-not $name) { Err "Give the skill a name, e.g.  tekt skill new $space summarize"; return }
+    $dir = Join-Path (Join-Path $sdir "skills") $name
+    $md  = Join-Path $dir "SKILL.md"
+    if (Test-Path -LiteralPath $md) { Warn "Skill '$name' already exists: $md"; return }
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $lines = @(
+        "---",
+        "name: $name",
+        "description: One line: what this skill does and when to use it.",
+        "---",
+        "",
+        "# $name",
+        "",
+        "## When to use",
+        "- Describe the situations where an AI should reach for this skill.",
+        "",
+        "## Steps",
+        "1. First step.",
+        "2. Next step.",
+        "",
+        "## Notes",
+        "- Anything the AI should know: sources, tone, formats, pitfalls."
+    )
+    # LF endings so the synced file is byte-identical to one made by install.sh
+    [IO.File]::WriteAllText($md, (($lines -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding $false))
+    Link-SpaceSkills $space
+    Success "New skill: $md"
+    Log "Edit it, then run  tekt space sync $space  - everyone in the Space gets it."
+}
+
+function Invoke-SkillCmd($argv) {
+    $argv = @($argv)
+    $sub = if ($argv.Count -ge 1 -and $argv[0]) { $argv[0] } else { "list" }
+    $a1  = if ($argv.Count -ge 2) { $argv[1] } else { "" }
+    $a2  = if ($argv.Count -ge 3) { $argv[2] } else { "" }
+    switch ($sub) {
+        "list"  { Skill-List }
+        "ls"    { Skill-List }
+        "new"   { Skill-New $a1 $a2 }
+        "link"  { Link-SpaceSkills; Success "Shared skills linked into Claude Code ($TektClaudeSkills)" }
+        default { Err "Unknown: skill $sub - use list, new or link" }
+    }
 }
 
 # -- Connect: let your AI apps use your Spaces (tekt connect [app]) -------------
@@ -936,6 +1115,10 @@ function Tekt-Connect($app) {
             return
         }
     }
+    if ((Test-Cmd "claude") -or (Test-Path -LiteralPath (Join-Path $HOME ".claude"))) {
+        Link-SpaceSkills
+        Success "Shared skills from your Spaces are linked into Claude Code ($TektClaudeSkills)"
+    }
     if (-not (Test-Cmd "npx")) {
         Warn "Your AI apps start the Spaces server with npx, which comes with Node.js. Install it first:  winget install OpenJS.NodeJS.LTS"
     }
@@ -1004,6 +1187,16 @@ function Tekt-Status {
             if (-not $last) { $last = "never" }
             Write-Host ("  [OK]  {0,-16} last sync {1}" -f (Split-Path $sd -Leaf), $last) -ForegroundColor Green
         }
+    }
+    $skTotal = 0; $skLinked = 0
+    foreach ($sd in $spaceDirs) { $skTotal += @(Get-SpaceSkillDirs $sd).Count }
+    if (Test-Path -LiteralPath $TektClaudeSkills) {
+        foreach ($l in @([IO.Directory]::GetFileSystemEntries($TektClaudeSkills, "*--*"))) {
+            if (Test-SkillOwnedLink $l) { $skLinked++ }
+        }
+    }
+    if ($skTotal -gt 0) {
+        Write-Host ("  [OK]  {0,-16} {1} of {2} linked into Claude Code" -f "Shared skills", $skLinked, $skTotal) -ForegroundColor Green
     }
     Write-Host "`n  AI apps connected to your Spaces" -ForegroundColor Cyan
     $capps     = 0
@@ -1079,6 +1272,8 @@ switch ($Command) {
         $app = if ($Rest.Count -ge 1 -and $Rest[0]) { $Rest[0] } else { "all" }
         Tekt-Connect $app
     }
+    "skill"  { Invoke-SkillCmd $Rest }
+    "skills" { Invoke-SkillCmd $Rest }
     "space"  {
         Refresh-SessionPath
         $sub = if ($Rest.Count -ge 1 -and $Rest[0]) { $Rest[0] } else { "list" }
@@ -1098,7 +1293,7 @@ switch ($Command) {
         }
     }
     "help"   {
-        Write-Host "Usage: .\install.ps1 [status|catalog|mcp|ui|share <port>|space ...|connect [app]|cli|help]"
+        Write-Host "Usage: .\install.ps1 [status|catalog|mcp|ui|share <port>|space ...|skill ...|connect [app]|cli|help]"
         Write-Host "       (after 'cli' you can type 'tekt' instead of '.\install.ps1')"
         Write-Host "  (none)        Install all Tekt tools"
         Write-Host "  status        Check which tools are installed"
@@ -1115,6 +1310,11 @@ switch ($Command) {
         Write-Host "  space autosync on|off                 Sync every 10 minutes in the background"
         Write-Host ""
         Write-Host "  connect [app]  Let your AI apps use your Spaces: all (default), claude-code, claude-desktop, codex"
+        Write-Host ""
+        Write-Host "Shared skills: skills in a Space appear in everyone's Claude Code"
+        Write-Host "  skill list                            Skills shared in your Spaces, and which are in Claude Code"
+        Write-Host "  skill new <space> <name>              Start a skill in a Space; everyone gets it after sync"
+        Write-Host "  skill link                            Re-link shared skills into Claude Code"
         Write-Host ""
         Write-Host "Windows note: after installs, restart PowerShell, then run .\install.ps1 status"
     }
