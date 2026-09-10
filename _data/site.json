@@ -107,6 +107,7 @@
       { "label": "Who it's for",        "slug": "who-its-for" },
       { "label": "Why it's different",  "slug": "why-its-different" },
       { "label": "Bring your own intelligence", "slug": "bring-your-own-intelligence" },
+      { "label": "Roadmap",             "slug": "roadmap" },
       { "label": "Quick Start",         "slug": "quick-start" },
       { "label": "After the install",   "slug": "after-the-install" },
       { "label": "Documentation path",  "slug": "the-documentation-path" },

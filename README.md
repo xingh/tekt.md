@@ -6,7 +6,7 @@ permalink: /index.html
 
 # Tekt — The Utility Belt for Your AI Harness
 
-![Tekt cover](./tekt.cover.png)
+![Tekt at the edge: one workspace, many machines, any agent](./tekt.cover.png)
 
 **Easy AI at the edge.** Tekt sets up an **AI sandbox** on your Linux or Windows machine so agents can do real work for you. It is an open-source utility belt for AI engineers: a hand-curated catalog of **tools**, **agents**, **MCP servers** and **skills**. It brings the best of open source and SaaS, already picked and vetted, so you don't have to choose. One script installs it on infrastructure you own, and you **bring your own intelligence**. Builders get a workbench ready to go. Operators get a stack they can run and share. Managers get a clear view of what the agents are doing. *Sovereignty · Security · Privacy.*
 
@@ -57,6 +57,12 @@ Tekt ships no model and no keys. Point your agents at whichever provider you cho
 | **Anthropic** | API key, or Claude Code / Claude Desktop | Claude models |
 
 Wire any of them into LibreChat, n8n, or an agent runtime's config. Tekt only connects them.
+
+## Roadmap
+
+Where the belt is headed: a modular framework of providers, knowledge, agents, communication and cloud. You plug in the models, then orchestrate, build and empower your own workflows. The iteration-by-iteration plan is in [`.manage/2026.09.10.iterations.plan.md`](https://github.com/xingh/tekt.md/blob/main/.manage/2026.09.10.iterations.plan.md).
+
+![Tekt framework roadmap: tekt/ai/providers, tekt/knowledge, tekt/agents, tekt/communication, tekt/cloud and tekt/framework](./tekt.roadmap.png)
 
 ---
 
