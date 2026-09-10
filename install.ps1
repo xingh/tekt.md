@@ -22,6 +22,8 @@
 #         tekt space add <name> [provider] [folder]   # create or join a Space
 #         tekt space list                             # show your Spaces
 #         tekt space sync [name]                      # two-way sync now
+#         tekt space invite <name>                    # write an invitation (copied to your clipboard)
+#         tekt space open <name>                      # open a Space's folder
 #         tekt space remove <name>                    # disconnect (files are kept)
 #         tekt space autosync on|off                  # sync every 10 minutes
 #
@@ -734,11 +736,7 @@ function Space-Add($rawName, $provider, $folder) {
     Write-Host ""
     Success "Space '$name' is ready: $dir"
     Log "Put files in docs\, notes in knowledge\, and skill folders in skills\."
-    if ($backend -ne "alias") {
-        Log "Invite people: in $label, share the folder '$folder' like any other folder."
-        Log "They run:  tekt space add $name $provider `"$folder`""
-        if ($backend -eq "drive") { Log "  (Folder shared with them? Add a shortcut to it in My Drive first.)" }
-    }
+    Log "Invite people:                  tekt space invite $name   (writes the invitation for you)"
     Log "Let your AI apps use it:        tekt connect"
     Log "Keep it in sync automatically:  tekt space autosync on"
 }
@@ -776,6 +774,9 @@ function Space-Sync($only) {
         $remote = Get-SpaceMeta $dir "remote"
         if (-not $remote) { $remote = "tekt-$name" }
         $folder = Get-SpaceMeta $dir "folder"
+        if (($remote.Length + $folder.Length + $dir.Length) -gt 200) {   # rclone names its lock files after both paths (#58)
+            Warn "$name has a very long path, and rclone may not be able to sync it. If it fails, keep Spaces somewhere shorter, e.g.  `$env:TEKT_SPACES = `"$HOME\Spaces`""
+        }
         $rcArgs = @("bisync", "${remote}:$folder", $dir) + $flags
         if ((Get-SpaceMeta $dir "initialized") -ne "1") { $rcArgs += $resyncFlags }
         $rcArgs += "-q"
@@ -861,11 +862,102 @@ function Space-Autosync($mode) {
     }
 }
 
+# Copy text to the clipboard when this computer has one (Set-Clipboard can be missing or
+# fail off Windows, e.g. Linux pwsh without xclip).
+function Copy-SpaceText($text) {
+    try {
+        Set-Clipboard -Value ($text -replace "`n", [Environment]::NewLine) -ErrorAction Stop
+        return $true
+    } catch { return $false }
+}
+
+# Resolve a Space name to its folder, or explain and return $null
+function Get-ActiveSpaceDir($rawName, $verb) {
+    if (-not $rawName) { Err "Which Space?  tekt space $verb <name>"; return $null }
+    $name = ConvertTo-SpaceName $rawName
+    $dir  = Join-Path $TektSpaces $name
+    if (-not $name -or -not (Test-Path -LiteralPath (Join-Path $dir ".tekt-space"))) {
+        Err "No Space named '$rawName'. See:  tekt space list"; return $null
+    }
+    return $dir
+}
+
+function Space-Invite($rawName) {   # write the invitation for a Space, and copy it
+    $dir = Get-ActiveSpaceDir $rawName "invite"
+    if (-not $dir) { return }
+    $name     = Split-Path $dir -Leaf
+    $provider = Get-SpaceMeta $dir "provider"
+    $folder   = Get-SpaceMeta $dir "folder"
+    $backend  = Get-SpaceBackend $provider
+    if (-not $backend) { $backend = $provider }
+    $label    = Get-SpaceLabel $backend
+    if (-not $label) { $label = $provider }
+    # A folder shared with you lands at the top level under its own name
+    $shared = if ($folder) { Split-Path $folder -Leaf } else { $name }
+    $join   = 'tekt space add {0} {1} "{2}"' -f $name, $provider, $shared
+    switch ($backend) {
+        "drive"    { $step1 = 'I''ve shared the folder "{0}" with you on Google Drive. Open "Shared with me", right-click it, choose Organize > Add shortcut, and pick My Drive.' -f $shared }
+        "onedrive" { $step1 = 'I''ve shared the folder "{0}" with you on OneDrive. Open the link I sent, then choose "Add shortcut to My files".' -f $shared }
+        "dropbox"  { $step1 = 'Accept my invitation to the shared folder "{0}" in {1}.' -f $shared, $label }
+        "box"      { $step1 = 'Accept my invitation to the shared folder "{0}" in {1}.' -f $shared, $label }
+        "webdav"   { $step1 = 'Accept my invitation to the shared folder "{0}" in {1}.' -f $shared, $label }
+        "alias" {
+            $remote = Get-SpaceMeta $dir "remote"
+            if (-not $remote) { $remote = "tekt-$name" }
+            $path = ""
+            if (Test-Cmd "rclone") {
+                foreach ($line in @(& rclone config show $remote 2>$null)) {
+                    if ([string]$line -match '^remote = (.*)$') { $path = $Matches[1].Trim(); break }
+                }
+            }
+            $step1 = 'Make sure you can open {0} on your computer.' -f $(if ($path) { $path } else { "the shared folder" })
+            $join  = 'tekt space add {0} folder "{1}"' -f $name, $(if ($path) { $path } else { "<path to the shared folder>" })
+        }
+        "s3" {
+            $step1 = 'Ask me for the S3 endpoint and access keys.'
+            $join  = 'tekt space add {0} s3 "{1}"' -f $name, $folder
+        }
+        default { $step1 = 'Get access to the shared folder "{0}".' -f $shared }
+    }
+    $msg = @(
+        ('Join our "{0}" Space on Tekt: shared documents, knowledge and AI skills.' -f $name),
+        "",
+        "1. $step1",
+        "2. Install Tekt (once):",
+        "   macOS / Linux:  curl -fsSL https://tekt.md/install.sh | bash",
+        "   Windows:        irm https://tekt.md/install.ps1 | iex",
+        "3. Join:                $join",
+        "4. Let your AI use it:  tekt connect",
+        "Guide: https://tekt.md/spaces/"
+    ) -join "`n"
+    if ($backend -ne "alias" -and $backend -ne "s3") {
+        Log "First share the folder '$folder' in $label with the people you're inviting. Then send them this:"
+    }
+    Write-Host ""
+    Write-Host $msg
+    Write-Host ""
+    if (Copy-SpaceText $msg) { Success "Copied to your clipboard. Paste it into an email or chat." }
+    else                     { Log "Copy the message above and send it to the people you're inviting." }
+}
+
+function Space-Open($rawName) {   # open a Space's folder in File Explorer
+    $dir = Get-ActiveSpaceDir $rawName "open"
+    if (-not $dir) { return }
+    try {
+        Invoke-Item -LiteralPath $dir -ErrorAction Stop
+        Success "Opened $dir"
+    } catch {
+        Log "Your Space is at: $dir"
+    }
+}
+
 function Space-Help {
     Write-Host "Usage: tekt space <command>"
     Write-Host "  add <name> [provider] [folder]  Create or join a Space (drive, onedrive, dropbox, box, nextcloud, folder, s3)"
     Write-Host "  list                            Show your Spaces"
     Write-Host "  sync [name]                     Two-way sync now (all Spaces, or just one)"
+    Write-Host "  invite <name>                   Write an invitation to a Space (copied to your clipboard)"
+    Write-Host "  open <name>                     Open a Space's folder"
     Write-Host "  remove <name>                   Disconnect a Space (your files are kept)"
     Write-Host "  autosync on|off                 Sync every 10 minutes in the background"
 }
@@ -1366,8 +1458,10 @@ switch ($Command) {
             "remove"   { Space-Remove $a1 }
             "rm"       { Space-Remove $a1 }
             "autosync" { Space-Autosync $a1 }
+            "invite"   { Space-Invite $a1 }
+            "open"     { Space-Open $a1 }
             "help"     { Space-Help }
-            default    { Warn "Unknown command: space $sub"; Space-Help }
+            default    { Err "Unknown: space $sub - use add, list, sync, invite, open, remove or autosync"; Space-Help }
         }
     }
     "help"   {
@@ -1384,6 +1478,8 @@ switch ($Command) {
         Write-Host "  space add <name> [provider] [folder]  Create or join a Space"
         Write-Host "  space list                            Show your Spaces"
         Write-Host "  space sync [name]                     Two-way sync now"
+        Write-Host "  space invite <name>                   Write an invitation to a Space (copied to your clipboard)"
+        Write-Host "  space open <name>                     Open a Space's folder"
         Write-Host "  space remove <name>                   Disconnect a Space (your files are kept)"
         Write-Host "  space autosync on|off                 Sync every 10 minutes in the background"
         Write-Host ""

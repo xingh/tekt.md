@@ -29,6 +29,7 @@ curl -fsSL https://tekt.md/install.sh | bash   # once: installs Tekt and the tek
 tekt space add team drive                      # sign in to Google Drive in your browser
 tekt space autosync on                         # keep it in sync every 10 minutes
 tekt connect                                   # let Claude Code, Claude Desktop and Codex use it
+tekt space invite team                         # write an invitation for your people
 ```
 
 On Windows, install with `irm https://tekt.md/install.ps1 | iex`, then run the same `tekt space` commands.
@@ -51,14 +52,28 @@ Tekt never sees your password. Sign-in tokens stay in rclone's config on your ow
 
 ## Invite people
 
-1. Share the Space's folder (for example `Tekt/team` in Google Drive) the way you share any folder.
-2. They install Tekt, then run the command `tekt space add` printed for them:
+1. Share the Space's folder (for example `Tekt/team` in Google Drive) with them, the way you share any folder.
+2. Let Tekt write the invitation:
 
 ```bash
-tekt space add team drive "Tekt/team"
+tekt space invite team
 ```
 
-On Google Drive, a folder someone shared with you shows up under *Shared with me*. Add a shortcut to it in *My Drive* first, then use that path.
+It prints a short message and copies it to your clipboard, ready to paste into an email or chat:
+
+```
+Join our "team" Space on Tekt: shared documents, knowledge and AI skills.
+
+1. I've shared the folder "team" with you on Google Drive. Open "Shared with me",
+   right-click it, choose Organize > Add shortcut, and pick My Drive.
+2. Install Tekt (once):
+   macOS / Linux:  curl -fsSL https://tekt.md/install.sh | bash
+   Windows:        irm https://tekt.md/install.ps1 | iex
+3. Join:                tekt space add team drive "team"
+4. Let your AI use it:  tekt connect
+```
+
+The steps match where the Space lives. Google Drive and OneDrive need a shortcut to the shared folder; Dropbox, Box and Nextcloud need the invitation accepted; a network folder needs its path. A folder someone shares with you lands at the top of your storage under its own name, so the join command uses `"team"`, not `"Tekt/team"`.
 
 Now everyone, and everyone's AI, works from the same files.
 
@@ -109,6 +124,8 @@ Skills from people outside your group work the same way. Put them in a Space's `
 | `tekt space list` | Show your Spaces, when they last synced, and what's in them |
 | `tekt space sync [name]` | Sync now: every Space, or just one |
 | `tekt space autosync on` / `off` | Sync every 10 minutes in the background |
+| `tekt space invite <name>` | Write an invitation to a Space and copy it to your clipboard |
+| `tekt space open <name>` | Open a Space's folder |
 | `tekt space remove <name>` | Disconnect a Space. Every file stays where it is. |
 | `tekt connect [app]` | Let Claude Code, Claude Desktop and Codex use your Spaces |
 | `tekt skill new <space> <name>` | Start a shared skill from a template |
