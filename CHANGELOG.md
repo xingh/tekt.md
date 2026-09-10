@@ -8,6 +8,15 @@ permalink: /changelog/index.html
 
 # Changelog
 
+## v0.4.0 — Shared skills
+
+Share skills with colleagues the way you share documents (#55).
+
+- **Skills in a Space appear in everyone's Claude Code.** After each sync, Tekt links `~/Tekt/Spaces/<space>/skills/<skill>/` into `~/.claude/skills/<space>--<skill>`. It uses a symlink on macOS and Linux and a directory junction on Windows, which needs no admin rights.
+- **Only Tekt's own links.** Links whose skill was deleted, or whose Space was disconnected, are removed. Your personal skills and any other folder are never touched, and a name clash is skipped with a warning.
+- **`tekt skill new <space> <name>`** starts a `SKILL.md` from a template. **`tekt skill list`** shows every shared skill and whether it's in Claude Code. **`tekt skill link`** repairs the links.
+- **`tekt connect`** also links shared skills, and **`tekt status`** counts them.
+
 ## v0.3.0 — Connect
 
 Connect your computer to your AI in one step (#54).

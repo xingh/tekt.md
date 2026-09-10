@@ -66,7 +66,7 @@ Now everyone, and everyone's AI, works from the same files.
 
 - **Documents** (`docs/`): proposals, PDFs, spreadsheets, meeting notes. Anything you'd want an assistant to read before it helps.
 - **Knowledge** (`knowledge/`): the things your group has agreed on: decisions, how-tos, glossaries, reference answers. Keep it short and current.
-- **Skills** (`skills/`): packaged instructions an AI agent loads for one kind of job. One folder per skill, with a `SKILL.md` inside. Starting with v0.4, Tekt links shared skills straight into Claude Code.
+- **Skills** (`skills/`): packaged instructions an AI agent loads for one kind of job. One folder per skill, with a `SKILL.md` inside. Tekt links shared skills straight into Claude Code (see below).
 
 ## Give your AI access
 
@@ -86,6 +86,21 @@ tekt connect claude-desktop    # or just one: claude-code, claude-desktop, codex
 
 Running it again changes nothing, and Tekt only touches its own `tekt-spaces` entry. Then ask your AI: *"What's in my team Space?"* or *"Summarize the new files in team/docs."*
 
+## Share skills
+
+A skill is a folder with a `SKILL.md`: a short set of instructions an AI loads for one kind of job, like "summarize meeting notes our way" or "draft a proposal from our template". You share skills the way you share documents:
+
+```bash
+tekt skill new team summarize    # starts team/skills/summarize/SKILL.md from a template
+# edit the SKILL.md, then:
+tekt space sync team             # everyone in the Space gets it on their next sync
+tekt skill list                  # every shared skill, and which ones are in your Claude Code
+```
+
+After each sync, Tekt links every skill in your Spaces into Claude Code as `~/.claude/skills/<space>--<skill>`. When someone deletes a skill, it disappears from everyone's Claude Code, and when you disconnect a Space, its skills go too. Tekt only manages its own links. Your personal skills and any folder that isn't Tekt's are never touched.
+
+Skills from people outside your group work the same way. Put them in a Space's `skills/` folder, for example the curated arkitype skills listed on the [catalog](/catalog/#skill).
+
 ## Everyday commands
 
 | Command | What it does |
@@ -96,6 +111,9 @@ Running it again changes nothing, and Tekt only touches its own `tekt-spaces` en
 | `tekt space autosync on` / `off` | Sync every 10 minutes in the background |
 | `tekt space remove <name>` | Disconnect a Space. Every file stays where it is. |
 | `tekt connect [app]` | Let Claude Code, Claude Desktop and Codex use your Spaces |
+| `tekt skill new <space> <name>` | Start a shared skill from a template |
+| `tekt skill list` | Every shared skill, and which are in your Claude Code |
+| `tekt skill link` | Re-link shared skills into Claude Code (repair) |
 | `tekt status` | Your tools, your Spaces, and which AI apps are connected, in one check |
 
 ## How it works

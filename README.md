@@ -68,7 +68,7 @@ tekt space autosync on        # sync every 10 minutes in the background
 tekt connect                  # let your AI apps (Claude Code, Claude Desktop, Codex) use it
 ```
 
-Share the `Tekt/team` folder from Google Drive the way you share anything. Your colleague runs `tekt space add team drive "Tekt/team"`, and from then on you both, and both your AIs, work from the same files. Full guide: [tekt.md/spaces](/spaces/).
+Share the `Tekt/team` folder from Google Drive the way you share anything. Your colleague runs `tekt space add team drive "Tekt/team"`, and from then on you both, and both your AIs, work from the same files. Skills travel the same way. Drop a skill folder into `skills/`, or run `tekt skill new team summarize`, and after the next sync it shows up in everyone's Claude Code. Full guide: [tekt.md/spaces](/spaces/).
 
 ## Roadmap
 
