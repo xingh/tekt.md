@@ -1566,13 +1566,7 @@ space_add() {
   echo ""
   success "Space '$name' is ready: $dir"
   log "Put files in docs/, notes in knowledge/, and skill folders in skills/."
-  if [ "$backend" = alias ]; then
-    log "Invite people: anyone who can open that folder runs  tekt space add $name folder <its path>"
-  else
-    log "Invite people: in $(space_label "$backend"), share the folder '$folder' like any other folder."
-    log "They run:  tekt space add $name $provider \"$folder\""
-    if [ "$backend" = drive ]; then log "  (Folder shared with them? They add a shortcut to it in My Drive first.)"; fi
-  fi
+  log "Invite people:                  tekt space invite $name   (writes the invitation for you)"
   log "Let your AI apps use it:        tekt connect"
   log "Keep it in sync automatically:  tekt space autosync on"
 }
@@ -1590,6 +1584,9 @@ space_sync() {
     remote="$(space_meta "$dir" remote)"; folder="$(space_meta "$dir" folder)"
     local extra=()
     if [ "$(space_meta "$dir" initialized)" != 1 ]; then extra=("${SPACE_RESYNC[@]}"); fi   # first sync merges both sides
+    if [ $(( ${#remote} + ${#folder} + ${#dir} )) -gt 200 ]; then   # rclone names its lock files after both paths (#58)
+      warn "$name has a very long path, and rclone may not be able to sync it. If it fails, keep Spaces somewhere shorter, e.g.  export TEKT_SPACES=~/Spaces"
+    fi
     log "Syncing $name ↔ $remote:$folder"
     if rclone bisync "$remote:$folder" "$dir" ${extra[@]+"${extra[@]}"} "${SPACE_FLAGS[@]}" -q; then
       space_set_meta "$dir" initialized 1
@@ -1636,6 +1633,79 @@ space_remove() {
   mv "$dir/.tekt-space" "$dir/.tekt-space.removed"
   space_link_skills "$name"   # its skills leave Claude Code
   success "Disconnected '$name'. Your files stay in $dir and in the cloud folder; nothing was deleted."
+}
+
+space_copy() {       # copy stdin to the clipboard when this computer has one
+  local text; text="$(cat)"
+  if command_exists pbcopy; then printf '%s' "$text" | pbcopy
+  elif command_exists wl-copy && [ -n "${WAYLAND_DISPLAY:-}" ]; then printf '%s' "$text" | wl-copy
+  elif command_exists xclip && [ -n "${DISPLAY:-}" ]; then printf '%s' "$text" | xclip -selection clipboard
+  elif command_exists clip.exe; then printf '%s' "$text" | clip.exe
+  else return 1
+  fi
+}
+
+space_invite() {     # write the invitation for a Space, and copy it
+  local name="${1:-}" dir provider backend folder shared step1 join path msg
+  if [ -z "$name" ]; then error "Which Space?  tekt space invite <name>"; return 1; fi
+  dir="$TEKT_SPACES/$name"
+  if [ ! -f "$dir/.tekt-space" ]; then error "No Space named '$name'. See:  tekt space list"; return 1; fi
+  provider="$(space_meta "$dir" provider)"; folder="$(space_meta "$dir" folder)"
+  backend="$(space_backend "$provider" 2>/dev/null || printf '%s' "$provider")"
+  shared="$(basename "${folder:-$name}")"   # a folder shared with you lands at the top level under its own name
+  join="tekt space add $name $provider \"$shared\""
+  case "$backend" in
+    drive)    step1="I've shared the folder \"$shared\" with you on Google Drive. Open \"Shared with me\", right-click it, choose Organize > Add shortcut, and pick My Drive." ;;
+    onedrive) step1="I've shared the folder \"$shared\" with you on OneDrive. Open the link I sent, then choose \"Add shortcut to My files\"." ;;
+    dropbox|box|webdav) step1="Accept my invitation to the shared folder \"$shared\" in $(space_label "$backend")." ;;
+    alias)
+      path="$(rclone config show "$(space_meta "$dir" remote)" 2>/dev/null | sed -n 's/^remote = //p')"
+      step1="Make sure you can open ${path:-the shared folder} on your computer."
+      join="tekt space add $name folder \"${path:-<path to the shared folder>}\"" ;;
+    s3)       step1="Ask me for the S3 endpoint and access keys."; join="tekt space add $name s3 \"$folder\"" ;;
+    *)        step1="Get access to the shared folder \"$shared\"." ;;
+  esac
+  msg="$(cat <<EOF
+Join our "$name" Space on Tekt: shared documents, knowledge and AI skills.
+
+1. $step1
+2. Install Tekt (once):
+   macOS / Linux:  curl -fsSL https://tekt.md/install.sh | bash
+   Windows:        irm https://tekt.md/install.ps1 | iex
+3. Join:                $join
+4. Let your AI use it:  tekt connect
+Guide: https://tekt.md/spaces/
+EOF
+)"
+  if [ "$backend" != alias ] && [ "$backend" != s3 ]; then
+    log "First share the folder '$folder' in $(space_label "$backend") with the people you're inviting. Then send them this:"
+  fi
+  echo ""
+  printf '%s\n' "$msg"
+  echo ""
+  if printf '%s\n' "$msg" | space_copy 2>/dev/null; then
+    success "Copied to your clipboard. Paste it into an email or chat."
+  else
+    log "Copy the message above and send it to the people you're inviting."
+  fi
+}
+
+space_open() {       # open a Space's folder in the file manager
+  local name="${1:-}" dir
+  if [ -z "$name" ]; then error "Which Space?  tekt space open <name>"; return 1; fi
+  dir="$TEKT_SPACES/$name"
+  if [ ! -f "$dir/.tekt-space" ]; then error "No Space named '$name'. See:  tekt space list"; return 1; fi
+  if [ "$(os_type)" = macos ]; then
+    open "$dir"
+  elif command_exists explorer.exe; then
+    explorer.exe "$(wslpath -w "$dir" 2>/dev/null || printf '%s' "$dir")" || true   # explorer exits 1 even on success
+  elif command_exists xdg-open; then
+    xdg-open "$dir" >/dev/null 2>&1 || true
+  else
+    log "Your Space is at: $dir"
+    return 0
+  fi
+  success "Opened $dir"
 }
 
 space_autosync() {
@@ -1905,6 +1975,8 @@ Share with your AI and your people
                                        (storage: drive, onedrive, dropbox, box, nextcloud, folder, s3)
   space list                           Show your Spaces
   space sync [name]                    Sync now (every Space, or one)
+  space invite <name>                  Write an invitation to a Space (copied to your clipboard)
+  space open <name>                    Open a Space's folder
   space remove <name>                  Disconnect a Space (keeps every file)
   space autosync on|off                Sync every 10 minutes in the background
   connect [app]                        Let your AI apps use your Spaces
@@ -2295,8 +2367,10 @@ case "${1:-}" in
       list|ls)   space_list ;;
       sync)      space_sync "${2:-}" ;;
       remove|rm) space_remove "${2:-}" ;;
+      invite)    space_invite "${2:-}" ;;
+      open)      space_open "${2:-}" ;;
       autosync)  space_autosync "${2:-on}" ;;
-      *) error "Unknown: space ${1} — use add, list, sync, remove or autosync"; exit 1 ;;
+      *) error "Unknown: space ${1} — use add, list, sync, invite, open, remove or autosync"; exit 1 ;;
     esac
     ;;
   cli)
