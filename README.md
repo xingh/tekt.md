@@ -12,7 +12,7 @@ permalink: /index.html
 
 Browse every shelf at [tekt.md/catalog](/catalog/), or read the source of truth: [`tekt.catalog.yaml`](https://github.com/xingh/tekt.md/blob/main/tekt.catalog.yaml).
 
-![Tekt architecture body](./tekt.body.png)
+![One workspace, many clients: people and clients share the same Tekt harness, tools, configuration and context](./tekt.md.png)
 
 ```mermaid
 flowchart LR

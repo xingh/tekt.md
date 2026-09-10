@@ -4,3 +4,10 @@
 
 [build.environment]
   NODE_VERSION = "20"
+
+# Images keep stable filenames and get swapped in place, so browsers must
+# revalidate (ETag, cheap 304) instead of holding a stale copy for hours.
+[[headers]]
+  for = "/*.png"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

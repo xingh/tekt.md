@@ -5,6 +5,7 @@ module.exports = function (eleventyConfig) {
   eleventyConfig.addPassthroughCopy("tekt.body.png");
   eleventyConfig.addPassthroughCopy("tekt.cover.png");
   eleventyConfig.addPassthroughCopy("tekt.roadmap.png");
+  eleventyConfig.addPassthroughCopy("tekt.md.png");
 
   // Resolve the arkitype layer (00–04) whose page lives at `url`.
   eleventyConfig.addFilter("layerFor", (layers, url) =>
