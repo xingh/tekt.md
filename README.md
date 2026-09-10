@@ -68,7 +68,7 @@ tekt space autosync on        # sync every 10 minutes in the background
 tekt connect                  # let your AI apps (Claude Code, Claude Desktop, Codex) use it
 ```
 
-Share the `Tekt/team` folder from Google Drive the way you share anything. Your colleague runs `tekt space add team drive "Tekt/team"`, and from then on you both, and both your AIs, work from the same files. Skills travel the same way. Drop a skill folder into `skills/`, or run `tekt skill new team summarize`, and after the next sync it shows up in everyone's Claude Code. Full guide: [tekt.md/spaces](/spaces/).
+Share the `Tekt/team` folder from Google Drive the way you share anything, then run `tekt space invite team`. It writes the invitation (how to accept the folder, install Tekt and join) and copies it to your clipboard. From then on you both, and both your AIs, work from the same files. Skills travel the same way. Drop a skill folder into `skills/`, or run `tekt skill new team summarize`, and after the next sync it shows up in everyone's Claude Code. Full guide: [tekt.md/spaces](/spaces/).
 
 ## Roadmap
 
@@ -124,6 +124,7 @@ bash install.sh
 tekt space add team drive    # share a folder with your AI and your people (Drive, OneDrive, Dropbox…)
 tekt space autosync on       # keep your Spaces in sync every 10 minutes
 tekt connect                 # let Claude Code, Claude Desktop and Codex use your Spaces
+tekt space invite team       # write an invitation for your colleagues (copied to the clipboard)
 bash install.sh status       # what landed, layer by layer
 bash install.sh mcp          # MCPHub + 4 curated MCP servers → :3000
 bash install.sh ui           # LibreChat → :3080, n8n → :5678

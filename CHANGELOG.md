@@ -8,6 +8,15 @@ permalink: /changelog/index.html
 
 # Changelog
 
+## v0.6.0 — Invite
+
+Bringing people in shouldn't take a how-to (#61).
+
+- **`tekt space invite <name>`** writes a ready-to-send invitation and copies it to your clipboard: how to accept the shared folder on your storage, how to install Tekt, the exact join command, and how to connect their AI.
+- **The right join command.** A folder shared with you lands at the top of your Drive, OneDrive or Dropbox under its own name, so invitations use `"team"`, not the owner's `"Tekt/team"`. Folder Spaces use the real network path.
+- **`tekt space open <name>`** opens a Space's folder in your file manager.
+- **Clear warning for very long paths** (#58). If a Space's paths are long enough that rclone may not manage to sync them, Tekt says so before syncing and suggests a shorter `TEKT_SPACES`.
+
 ## v0.5.0 — Solid ground
 
 Installs you can trust, on every OS.
