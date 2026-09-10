@@ -200,7 +200,7 @@ Target direction: preserve Sovrant's current color scheme while adopting Claude-
 
 ## 7. Study-hall checklist
 
-The self-help path for a fresh AI engineer, start to finish:
+The self-help path for anyone new to Tekt (builder, operator, or manager), start to finish:
 
 ```bash
 curl -fsSL https://tekt.md/install.sh | bash    # 1. bootstrap everything

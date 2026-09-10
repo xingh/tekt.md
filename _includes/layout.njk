@@ -6,7 +6,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{{ title or site.domain }}</title>
-  <meta name="description" content="{{ cur.blurb if cur else site.tagline }}" />
+  <meta name="description" content="{{ cur.blurb if cur else site.positioning }}" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" />
@@ -295,6 +295,216 @@
     }
     .copy:hover { border-color: var(--accent); }
 
+    .slogan {
+      font-family: var(--f-display);
+      font-weight: 600;
+      font-size: clamp(1.6rem, 3.2vw, 2.3rem);
+      line-height: 1.05;
+      letter-spacing: 0.01em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    /* Home bands: catalog shelves, roles, layers */
+    .band-head {
+      max-width: var(--wide);
+      margin: 0 auto 0.8rem;
+      padding: 0 1.5rem;
+      display: flex;
+      align-items: baseline;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .band-head h2 {
+      font-family: var(--f-mono);
+      font-size: 0.75rem;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .band-head a { margin-left: auto; font-family: var(--f-mono); font-size: 0.78rem; color: var(--link); text-decoration: none; }
+    .band-head a:hover { text-decoration: underline; }
+
+    .shelves {
+      max-width: var(--wide);
+      margin: 0 auto 2.75rem;
+      padding: 0 1.5rem;
+      list-style: none;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1rem;
+    }
+    .shelf {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      box-shadow: var(--shadow);
+      padding: 1.1rem 1.2rem 1rem;
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      gap: 0.65rem;
+      min-width: 0;
+    }
+    .shelf header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem 0.55rem; }
+    .shelf .kind { font-family: var(--f-display); font-weight: 700; font-size: 1.85rem; line-height: 1; text-transform: uppercase; white-space: nowrap; }
+    .shelf .count { font-family: var(--f-mono); font-size: 0.85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .shelf .status { margin-left: auto; }
+    .shelf p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+    .shelf .items { list-style: none; display: flex; flex-wrap: wrap; gap: 0.3rem; align-content: start; }
+    .shelf .items li {
+      font-family: var(--f-mono);
+      font-size: 0.72rem;
+      padding: 0.12rem 0.4rem;
+      border: 1px solid var(--line);
+      border-radius: 3px;
+      background: var(--sunken);
+    }
+    .shelf .items li.more { background: none; border-style: dashed; color: var(--muted); }
+    .shelf .browse { font-family: var(--f-mono); font-size: 0.8rem; color: var(--link); text-decoration: none; border-top: 1px dashed var(--line); padding-top: 0.6rem; }
+    .shelf .browse:hover { text-decoration: underline; }
+    @media (max-width: 1000px) { .shelves { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 560px) { .shelves { grid-template-columns: 1fr; } }
+
+    /* Shelf status: shipping = solid, growing = outlined accent, curating = dashed */
+    .status {
+      font-family: var(--f-mono);
+      font-size: 0.66rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 0.12rem 0.45rem;
+      border: 1px solid var(--ink);
+      border-radius: 999px;
+      white-space: nowrap;
+      color: var(--ink);
+    }
+    .status-shipping, .status-installed { background: var(--ink); color: var(--surface); }
+    .status-growing, .status-default { border-color: var(--accent); color: var(--accent); }
+    .status-curating, .status-optional { border-style: dashed; border-color: var(--muted); color: var(--muted); }
+
+    .byoi { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+    .byoi a {
+      font-family: var(--f-mono);
+      font-size: 0.8rem;
+      padding: 0.15rem 0.5rem;
+      border: 1px solid var(--line);
+      border-radius: 3px;
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .byoi a:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* Why it's different: one claim, four things a harness needs */
+    .why { max-width: var(--wide); margin: 0 auto 2.75rem; padding: 0 1.5rem; }
+    .why-panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      display: grid;
+      grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    }
+    .why-panel .claim { padding: 1.5rem 1.6rem; border-right: 1px solid var(--line); display: grid; gap: 0.8rem; align-content: start; }
+    .why-panel .not {
+      font-family: var(--f-display);
+      font-weight: 700;
+      font-size: clamp(1.6rem, 2.6vw, 2.15rem);
+      line-height: 1.05;
+      text-transform: uppercase;
+      text-wrap: balance;
+    }
+    .why-panel .does { color: var(--muted); max-width: 46ch; }
+    .why-panel dl { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); align-content: start; }
+    .why-panel dt, .why-panel dd { padding: 0.85rem 1.2rem; border-bottom: 1px dashed var(--line); }
+    .why-panel dt { font-family: var(--f-mono); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); padding-top: 1.05rem; }
+    .why-panel dd { display: grid; gap: 0.15rem; }
+    .why-panel dd .where { font-family: var(--f-mono); font-size: 0.75rem; color: var(--muted); }
+    .why-panel dl > :nth-last-child(-n+2) { border-bottom: 0; }
+    @media (max-width: 900px) {
+      .why-panel { grid-template-columns: 1fr; }
+      .why-panel .claim { border-right: 0; border-bottom: 1px solid var(--line); }
+    }
+    @media (max-width: 480px) { .why-panel dl { grid-template-columns: 1fr; } .why-panel dt { border-bottom: 0; padding-bottom: 0; } }
+
+    .status-bring-your-own { border-style: dashed; border-color: var(--accent); color: var(--accent); }
+
+    /* /catalog/ filter bar */
+    .filters { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 1.5rem; }
+    .filters button {
+      font: inherit;
+      font-size: 0.85rem;
+      padding: 0.35rem 0.75rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--ink);
+      cursor: pointer;
+    }
+    .filters button span { font-family: var(--f-mono); font-size: 0.75rem; color: var(--muted); margin-left: 0.25rem; }
+    .filters button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+    .filters button[aria-pressed="true"] span { color: var(--surface); }
+    main td .made { color: var(--muted); font-size: 0.85rem; }
+
+    /* Build · Run · Steer — one strip, three roles */
+    .roles {
+      max-width: var(--wide);
+      margin: 0 auto 2.25rem;
+      padding: 0 1.5rem;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .role {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      padding: 1.1rem 1.25rem 1.2rem;
+      display: grid;
+      grid-template-rows: auto auto 1fr auto auto;
+      gap: 0.55rem;
+      min-width: 0;
+    }
+    .role + .role { border-left: 0; }
+    .role:first-child { border-radius: 6px 0 0 6px; }
+    .role:last-child { border-radius: 0 6px 6px 0; }
+    .role .verb {
+      font-family: var(--f-display);
+      font-weight: 700;
+      font-size: 2.1rem;
+      line-height: 1;
+      text-transform: uppercase;
+      color: var(--ink);
+    }
+    .role p { color: var(--muted); font-size: 0.92rem; line-height: 1.55; max-width: 40ch; }
+    .role .try {
+      font-family: var(--f-mono);
+      font-size: 0.78rem;
+      color: var(--ink);
+      background: var(--sunken);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 0.35rem 0.55rem;
+      overflow-x: auto;
+      white-space: nowrap;
+      min-width: 0;
+    }
+    .role .via { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .chip {
+      display: inline-block;
+      white-space: nowrap;
+      font-family: var(--f-mono);
+      font-size: 0.72rem;
+      padding: 0.15rem 0.45rem;
+      border: 1px solid var(--c);
+      color: var(--c);
+      border-radius: 3px;
+      text-decoration: none;
+    }
+    .chip:hover { background: var(--c); color: var(--surface); }
+    @media (max-width: 900px) {
+      .roles { grid-template-columns: 1fr; }
+      .role + .role { border-left: 1px solid var(--line); border-top: 0; }
+      .role:first-child { border-radius: 6px 6px 0 0; }
+      .role:last-child { border-radius: 0 0 6px 6px; }
+    }
+
     /* The five layers — modeled on the arkitype cover's connected cards */
     .layers {
       max-width: var(--wide);
@@ -540,7 +750,7 @@
   <header class="masthead">
     <div class="masthead-inner">
       <a class="wordmark" href="/">TEKT<span>.md</span></a>
-      <span class="tagline">{{ site.tagline }}</span>
+      <span class="tagline">{{ site.positioning }}</span>
       <a class="gh" href="{{ site.repo }}">github.com/xingh/tekt.md ↗</a>
     </div>
   </header>
@@ -585,10 +795,11 @@
   {% if isHome %}
   <section class="hero" aria-labelledby="hero-title">
     <div class="intro">
-      <span class="eyebrow">distribution · catalog {{ site.catalog_version }} · {{ site.pillars | join(" · ") }}</span>
+      <span class="eyebrow">open source · catalog {{ site.catalog_version }} · {{ site.pillars | join(" · ") }}</span>
       <h1 id="hero-title">Tekt</h1>
+      <p class="slogan">{{ site.tagline }}</p>
       <span class="rule" aria-hidden="true"></span>
-      <p class="lead">Bootstrap open-source AI on <strong>your hardware</strong>, with <strong>your keys</strong>, in one script: dev tooling, workspace sync, local models, agent runtimes, an MCP hub, and self-hosted chat and workflow UIs.</p>
+      <p class="lead">Tekt sets up an <strong>AI sandbox</strong> on your Linux or Windows machine so agents can do real work for you. It brings the best open-source and SaaS tools, <strong>already picked and vetted</strong>, so you don't have to choose. You <strong>bring your own intelligence</strong>.</p>
     </div>
     <div class="install" aria-label="Install">
       <div class="row">
@@ -599,9 +810,62 @@
         <span class="eyebrow">Windows PowerShell</span>
         <div class="cmd ps"><code>{{ site.install.windows }}</code><button class="copy" type="button" data-copy="{{ site.install.windows }}">Copy</button></div>
       </div>
+      <div class="row">
+        <span class="eyebrow">Bring your own intelligence</span>
+        <div class="byoi">{% for e in catalog.byKind.intelligence %}<a href="/catalog/#intelligence">{{ e.name }}</a>{% endfor %}</div>
+      </div>
     </div>
   </section>
 
+  <div class="band-head"><h2>What's in the belt · pre-vetted</h2><a href="/catalog/">Browse all {{ catalog.entries.length }} entries →</a></div>
+  <ul class="shelves">
+    {% for s in site.shelves %}{% if not s.catalogOnly %}
+    {% set items = catalog.byKind[s.kind] %}
+    <li class="shelf">
+      <header>
+        <span class="kind">{{ s.title }}</span>
+        <span class="count">{{ items.length }}</span>
+        <span class="status status-{{ s.status }}">{{ s.status }}</span>
+      </header>
+      <p>{{ s.blurb }}</p>
+      <ul class="items">
+        {% for e in items %}{% if loop.index <= 8 %}<li>{{ e.name | escape }}</li>{% endif %}{% endfor %}
+        {% if items.length > 8 %}<li class="more">+{{ items.length - 8 }} more</li>{% endif %}
+      </ul>
+      <a class="browse" href="/catalog/#{{ s.kind }}">Browse {{ s.title | lower }} →</a>
+    </li>
+    {% endif %}{% endfor %}
+  </ul>
+
+  <div class="band-head"><h2>Why it's different</h2></div>
+  <section class="why" aria-label="Why Tekt is different">
+    <div class="why-panel">
+      <div class="claim">
+        <p class="not">{{ site.why.not }}</p>
+        <p class="does">{{ site.why.does }}</p>
+      </div>
+      <dl>
+        {% for i in site.why.items %}<dt>{{ i.k }}</dt><dd><span>{{ i.v }}</span><span class="where">{{ i.where }}</span></dd>{% endfor %}
+      </dl>
+    </div>
+  </section>
+
+  <div class="band-head"><h2>Who it's for</h2></div>
+  <section class="roles" aria-label="Who Tekt is for">
+    {% for a in site.audiences %}
+    <div class="role" id="for-{{ a.id }}">
+      <span class="eyebrow">For {{ a.who | lower }}</span>
+      <h2 class="verb">{{ a.verb }}</h2>
+      <p>{{ a.gets }}</p>
+      <code class="try">{{ a.cmd | escape }}</code>
+      <span class="via">
+        {% for code in a.layers %}{% set L = site.layers | layerCode(code) %}<a class="chip tinted" href="{{ L.url }}" style="--c-l:{{ L.color }};--c-d:{{ L.color_dark }}">{{ L.code }} {{ L.name }}</a>{% endfor %}
+      </span>
+    </div>
+    {% endfor %}
+  </section>
+
+  <div class="band-head"><h2>How it's organized · arkitype layers 00 → 04</h2><a href="/00-arkitype/">What is an arkitype? →</a></div>
   <ol class="layers" aria-label="The five arkitype layers, in build order">
     {% for l in site.layers %}
     <li class="tinted" style="--c-l:{{ l.color }};--c-d:{{ l.color_dark }}">
@@ -623,9 +887,10 @@
     <span class="rule" aria-hidden="true"></span>
     <p class="lead">{{ cur.blurb }}</p>
     {% else %}
-    <span class="eyebrow">{{ site.domain }}</span>
+    <span class="eyebrow">{{ eyebrow or site.domain }}</span>
     <h1>{{ title }}</h1>
     <span class="rule" aria-hidden="true"></span>
+    {% if lead %}<p class="lead">{{ lead }}</p>{% endif %}
     {% endif %}
   </section>
   {% endif %}

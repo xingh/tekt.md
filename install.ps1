@@ -417,7 +417,8 @@ function Tekt-Status {
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 function Main {
-    Write-Host "`nTekt Bootstrap Installer (Windows) — https://tekt.md`n" -ForegroundColor Cyan
+    Write-Host "`nTekt — the utility belt for your AI harness (Windows installer) — https://tekt.md" -ForegroundColor Cyan
+    Write-Host "Pre-vetted tools for an AI sandbox. Bring your own intelligence: Ollama, OpenRouter, OpenAI, Anthropic.`n"
     Refresh-SessionPath
     Log "Tip: WSL2 gives full Linux parity — wsl --install, then bash install.sh"
 

@@ -1,7 +1,51 @@
 {
   "name": "tekt",
   "domain": "tekt.md",
-  "tagline": "The Linux of AI Orchestration at the Edge",
+  "tagline": "The utility belt for your AI harness.",
+  "positioning": "Easy AI at the edge for builders, operators and managers",
+  "promise": "One script installs it on machines you own, with keys you hold.",
+  "why": {
+    "not": "Tekt isn't an agent, a model or a platform.",
+    "does": "It's the utility belt around them. Tekt manages the metadata, structure, processes and state of your harness, gets you started, and keeps your agents in sync through shared communications and knowledge tools. Every tool is pre-vetted and runs on your own infrastructure.",
+    "items": [
+      { "k": "Metadata",  "v": "What's installed, where, which version, and who made it",   "where": "tekt.catalog.yaml" },
+      { "k": "Structure", "v": "How machines, agents and tools fit together",                "where": "arkitype layers 00 – 04" },
+      { "k": "Processes", "v": "How agents hand work to each other and to people",           "where": "MCPHub · n8n · LibreChat" },
+      { "k": "State",     "v": "One workspace and memory every agent can read and write",    "where": "rclone → S3 · Tailscale · memory MCP" }
+    ]
+  },
+  "shelves": [
+    { "kind": "tool",  "title": "Tools",       "status": "shipping",
+      "blurb": "The toolchain, storage, network and UIs an AI stack stands on." },
+    { "kind": "agent", "title": "Agents",      "status": "shipping",
+      "blurb": "Agent runtimes and clients, from Claude Code to single-binary edge agents." },
+    { "kind": "mcp",   "title": "MCP servers", "status": "growing",
+      "blurb": "Tools your agents can call, served from one hub. Hand-picked additions land here." },
+    { "kind": "skill", "title": "Skills",      "status": "curating",
+      "blurb": "Hand-curated, tested skills your agents load for one kind of job." },
+    { "kind": "intelligence", "title": "Intelligence", "status": "bring-your-own", "catalogOnly": true,
+      "blurb": "Tekt ships no model and no keys. Point your agents at the provider you choose, by API or through the provider's own client." }
+  ],
+  "audiences": [
+    {
+      "id": "builders", "verb": "Build", "who": "Builders",
+      "gets": "A ready AI sandbox for AI engineers. Toolchain, local models, agent runtimes and MCP tools arrive in one pass, so the first hour goes to your idea.",
+      "cmd": "bash install.sh && claude",
+      "layers": ["01", "03"]
+    },
+    {
+      "id": "operators", "verb": "Run", "who": "Operators",
+      "gets": "A stack you can keep running. Workspace sync, a private network, one status check, and HTTPS sharing in a single command.",
+      "cmd": "bash install.sh status",
+      "layers": ["01", "02"]
+    },
+    {
+      "id": "managers", "verb": "Steer", "who": "Managers",
+      "gets": "A clear view of the work. Chat and workflow UIs open in any browser, and a plain-language plan says what is installed and why.",
+      "cmd": "https://workspace.your-tailnet.ts.net",
+      "layers": ["00", "04"]
+    }
+  ],
   "pillars": ["Sovereignty", "Security", "Privacy"],
   "repo": "https://github.com/xingh/tekt.md",
   "catalog_version": "2026.07",
@@ -60,6 +104,9 @@
   ],
   "nav": [
     { "title": "Home", "url": "/", "sections": [
+      { "label": "Who it's for",        "slug": "who-its-for" },
+      { "label": "Why it's different",  "slug": "why-its-different" },
+      { "label": "Bring your own intelligence", "slug": "bring-your-own-intelligence" },
       { "label": "Quick Start",         "slug": "quick-start" },
       { "label": "After the install",   "slug": "after-the-install" },
       { "label": "Documentation path",  "slug": "the-documentation-path" },
@@ -69,6 +116,13 @@
       { "label": "Architecture",        "slug": "architecture-reference" },
       { "label": "Troubleshooting",     "slug": "troubleshooting" },
       { "label": "Credits",             "slug": "credits" }
+    ] },
+    { "title": "Catalog", "url": "/catalog/", "sections": [
+      { "label": "Tools",       "slug": "tool" },
+      { "label": "Agents",      "slug": "agent" },
+      { "label": "MCP servers", "slug": "mcp" },
+      { "label": "Skills",      "slug": "skill" },
+      { "label": "Intelligence (bring your own)", "slug": "intelligence" }
     ] },
     { "code": "00", "title": "Arkitype", "url": "/00-arkitype/", "sections": [
       { "label": "The arkitype section", "slug": "the-00-arkitype-section" },

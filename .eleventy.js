@@ -10,6 +10,11 @@ module.exports = function (eleventyConfig) {
     (layers || []).find((l) => l.url === url) || null
   );
 
+  // Resolve a layer by its code ("00"–"04").
+  eleventyConfig.addFilter("layerCode", (layers, code) =>
+    (layers || []).find((l) => l.code === code) || null
+  );
+
   // Neighbor along the 00 → 04 build order; the home page sits before 00.
   eleventyConfig.addFilter("layerAt", (layers, url, offset) => {
     const i = (layers || []).findIndex((l) => l.url === url);

@@ -6,7 +6,7 @@ permalink: /00-arkitype/index.html
 
 # 00 — Arkitype: Composing a Tekt Instance
 
-An **arkitype** is the declarative composition of a Tekt instance: which components you install, which archetypal role the machine plays, and how it relates to the other nodes in your topology. It is what makes Tekt a *distribution* rather than a pile of install commands — the same way a Linux distro is defined by its package selection and defaults, a Tekt instance is defined by its arkitype.
+An **arkitype** is the declarative composition of a Tekt instance: which components you install, which archetypal role the machine plays, and how it relates to the other nodes in your topology. It is what makes Tekt a *distribution* rather than a pile of install commands. A Tekt instance is defined by its arkitype: the components, defaults, and roles that fit it to the builders, operators, and managers who use it.
 
 An arkitype answers three questions:
 
