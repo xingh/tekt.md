@@ -11,7 +11,7 @@
       { "k": "Metadata",  "v": "What's installed, where, which version, and who made it",   "where": "tekt.catalog.yaml" },
       { "k": "Structure", "v": "How machines, agents and tools fit together",                "where": "arkitype layers 00 – 04" },
       { "k": "Processes", "v": "How agents hand work to each other and to people",           "where": "MCPHub · n8n · LibreChat" },
-      { "k": "State",     "v": "One workspace and memory every agent can read and write",    "where": "rclone → S3 · Tailscale · memory MCP" }
+      { "k": "State",     "v": "One workspace and memory every agent can read and write",    "where": "Spaces on Drive, OneDrive or Dropbox · memory MCP" }
     ]
   },
   "shelves": [
@@ -107,6 +107,7 @@
       { "label": "Who it's for",        "slug": "who-its-for" },
       { "label": "Why it's different",  "slug": "why-its-different" },
       { "label": "Bring your own intelligence", "slug": "bring-your-own-intelligence" },
+      { "label": "Share with your people", "slug": "share-with-your-people" },
       { "label": "Roadmap",             "slug": "roadmap" },
       { "label": "Quick Start",         "slug": "quick-start" },
       { "label": "After the install",   "slug": "after-the-install" },
@@ -124,6 +125,15 @@
       { "label": "MCP servers", "slug": "mcp" },
       { "label": "Skills",      "slug": "skill" },
       { "label": "Intelligence (bring your own)", "slug": "intelligence" }
+    ] },
+    { "title": "Spaces", "url": "/spaces/", "sections": [
+      { "label": "What a Space is",       "slug": "what-a-space-is" },
+      { "label": "Make your first Space", "slug": "make-your-first-space" },
+      { "label": "Where it can live",     "slug": "where-it-can-live" },
+      { "label": "Invite people",         "slug": "invite-people" },
+      { "label": "Give your AI access",   "slug": "give-your-ai-access" },
+      { "label": "Everyday commands",     "slug": "everyday-commands" },
+      { "label": "Troubleshooting",       "slug": "troubleshooting" }
     ] },
     { "code": "00", "title": "Arkitype", "url": "/00-arkitype/", "sections": [
       { "label": "The arkitype section", "slug": "the-00-arkitype-section" },
@@ -175,7 +185,8 @@
     { "title": "Downloads", "url": "/install.sh", "sections": [
       { "label": "install.sh (Linux/macOS/WSL2)", "href": "/install.sh" },
       { "label": "install.ps1 (Windows)",         "href": "/install.ps1" },
-      { "label": "tekt.catalog.yaml (pins)",      "href": "/tekt.catalog.yaml" }
+      { "label": "tekt.catalog.yaml (pins)",      "href": "/tekt.catalog.yaml" },
+      { "label": "Changelog",                     "href": "/changelog/" }
     ] }
   ]
 }
