@@ -94,7 +94,7 @@ claude_desktop_installed() {
   if [ "$os" = "macos" ]; then
     [ -d "/Applications/Claude.app" ] || [ -d "$HOME/Applications/Claude.app" ]
   else
-    return 1
+    command_exists claude-desktop   # official Linux beta (apt package claude-desktop)
   fi
 }
 
@@ -705,6 +705,57 @@ install_claude_code() {
 # =============================================================================
 # 9a. Claude Desktop
 # =============================================================================
+# Official Claude Desktop for Linux (beta): Ubuntu 22.04+ / Debian 12+, amd64 and arm64,
+# from Anthropic's apt repository — https://code.claude.com/docs/en/desktop-linux
+CLAUDE_DESKTOP_KEY_FPR="31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE"
+
+install_claude_desktop_linux() {
+  local distro arch key list
+  distro="$(linux_distro)"
+  arch="$(dpkg --print-architecture 2>/dev/null || true)"
+  case "$distro" in
+    ubuntu|debian|linuxmint|pop) ;;
+    *)
+      warn "Claude Desktop for Linux (beta) supports Ubuntu and Debian for now, not $distro."
+      warn "Use Claude from the terminal instead (installed above): run  claude"
+      return 0
+      ;;
+  esac
+  case "$arch" in
+    amd64|arm64) ;;
+    *) warn "Claude Desktop for Linux supports amd64 and arm64 only (this machine: ${arch:-unknown})."; return 0 ;;
+  esac
+  if ! has_desktop; then
+    log "No desktop session here — skipping Claude Desktop. Use Claude from the terminal: claude"
+    return 0
+  fi
+  require_sudo || return 1
+  if ! command_exists gpg || ! command_exists curl; then $SUDO apt-get install -y -q curl gnupg; fi
+  key=/usr/share/keyrings/claude-desktop-archive-keyring.asc
+  list=/etc/apt/sources.list.d/claude-desktop.list
+  log "Adding Anthropic's apt repository for Claude Desktop (beta)..."
+  if ! $SUDO curl -fsSLo "$key" https://downloads.claude.ai/claude-desktop/key.asc; then
+    warn "Couldn't download Anthropic's signing key. Check that this machine can reach downloads.claude.ai."
+    return 1
+  fi
+  if ! gpg --show-keys --with-colons "$key" 2>/dev/null | awk -F: '$1 == "fpr" { print $10 }' | grep -x "$CLAUDE_DESKTOP_KEY_FPR" >/dev/null; then
+    $SUDO rm -f "$key"
+    warn "That key doesn't match Anthropic's fingerprint ($CLAUDE_DESKTOP_KEY_FPR), so Tekt won't use it."
+    return 1
+  fi
+  echo "deb [arch=amd64,arm64 signed-by=$key] https://downloads.claude.ai/claude-desktop/apt/stable stable main" \
+    | $SUDO tee "$list" >/dev/null
+  $SUDO apt-get update -q && $SUDO apt-get install -y -q claude-desktop || true
+  if command_exists claude-desktop; then
+    success "Claude Desktop (Linux beta) installed — open Claude from your apps, or run: claude-desktop"
+    log "Sign in with your claude.ai account. Updates arrive with your normal system updates (sudo apt upgrade)."
+    log "Cowork needs virtualization access:  sudo usermod -aG kvm \$USER   (then log out and back in)"
+  else
+    warn "Claude Desktop didn't install. See https://code.claude.com/docs/en/desktop-linux"
+    return 1
+  fi
+}
+
 install_claude_desktop() {
   section "Claude Desktop"
 
@@ -714,9 +765,12 @@ install_claude_desktop() {
   fi
 
   local os; os="$(os_type)"
+  if [ "$os" = "linux" ]; then
+    install_claude_desktop_linux
+    return
+  fi
   if [ "$os" != "macos" ]; then
-    warn "Claude Desktop auto-install is currently macOS-only in this bootstrap."
-    warn "Install manually from https://claude.ai/download"
+    warn "Install Claude Desktop from https://claude.ai/download"
     return
   fi
 
