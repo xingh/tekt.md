@@ -8,6 +8,14 @@ permalink: /changelog/index.html
 
 # Changelog
 
+## v0.7.0 — See your Spaces
+
+For people who never open a terminal (#31).
+
+- **`tekt space gui`** installs [RcloneView](https://rcloneview.com) and opens it: a point-and-click window for browsing your cloud storage and copying files to and from your computer. macOS installs it from the Homebrew cask. Windows uses the official installer, because winget's package is years out of date. Linux gets a no-sudo AppImage and a FUSE 2 hint if needed.
+- **Desktops only.** The full install adds RcloneView where there's a desktop and skips it on servers.
+- **Honest labeling.** RcloneView is freemium and proprietary (Bdrive Inc.), and the catalog says so. Versions are pinned in `tekt.catalog.yaml`.
+
 ## v0.6.0 — Invite
 
 Bringing people in shouldn't take a how-to (#61).
