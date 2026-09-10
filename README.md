@@ -65,6 +65,7 @@ Git is too technical, and S3 is too much work. Your people already use Google Dr
 ```
 tekt space add team drive     # sign in to Google Drive in your browser, and that's it
 tekt space autosync on        # sync every 10 minutes in the background
+tekt connect                  # let your AI apps (Claude Code, Claude Desktop, Codex) use it
 ```
 
 Share the `Tekt/team` folder from Google Drive the way you share anything. Your colleague runs `tekt space add team drive "Tekt/team"`, and from then on you both, and both your AIs, work from the same files. Full guide: [tekt.md/spaces](/spaces/).
@@ -122,6 +123,7 @@ bash install.sh
 ```
 tekt space add team drive    # share a folder with your AI and your people (Drive, OneDrive, Dropbox…)
 tekt space autosync on       # keep your Spaces in sync every 10 minutes
+tekt connect                 # let Claude Code, Claude Desktop and Codex use your Spaces
 bash install.sh status       # what landed, layer by layer
 bash install.sh mcp          # MCPHub + 4 curated MCP servers → :3000
 bash install.sh ui           # LibreChat → :3080, n8n → :5678

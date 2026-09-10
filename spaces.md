@@ -28,6 +28,7 @@ Everyone who joins keeps a synced copy at `~/Tekt/Spaces/<name>` on their own co
 curl -fsSL https://tekt.md/install.sh | bash   # once: installs Tekt and the tekt command
 tekt space add team drive                      # sign in to Google Drive in your browser
 tekt space autosync on                         # keep it in sync every 10 minutes
+tekt connect                                   # let Claude Code, Claude Desktop and Codex use it
 ```
 
 On Windows, install with `irm https://tekt.md/install.ps1 | iex`, then run the same `tekt space` commands.
@@ -69,10 +70,21 @@ Now everyone, and everyone's AI, works from the same files.
 
 ## Give your AI access
 
-Your Space is a normal folder, so any AI tool that can read files can use it: point it at `~/Tekt/Spaces`.
+One command lets the AI apps on your computer read and write your Spaces:
 
-- **MCPHub** (`tekt mcp`) now exposes `/spaces` to every connected client, alongside `/workspace`.
-- **Coming in v0.3:** `tekt connect` registers your Spaces with Claude Code, Claude Desktop and Codex in one command.
+```bash
+tekt connect                   # every supported app it finds
+tekt connect claude-desktop    # or just one: claude-code, claude-desktop, codex
+```
+
+| App | What Tekt does |
+| --- | --- |
+| **Claude Code** | Registers the MCP server `tekt-spaces` for your user account |
+| **Claude Desktop** | Adds `tekt-spaces` to `claude_desktop_config.json` and saves a `.bak-tekt` copy of the original first. Restart the app afterwards. |
+| **Codex** | Adds `[mcp_servers.tekt-spaces]` to `~/.codex/config.toml`, with a `.bak-tekt` copy first |
+| **Anything else that speaks MCP** | Run `npx -y @modelcontextprotocol/server-filesystem ~/Tekt/Spaces`, or use MCPHub (`tekt mcp`) at `http://localhost:3000/mcp`, which serves `/spaces` too |
+
+Running it again changes nothing, and Tekt only touches its own `tekt-spaces` entry. Then ask your AI: *"What's in my team Space?"* or *"Summarize the new files in team/docs."*
 
 ## Everyday commands
 
@@ -83,7 +95,8 @@ Your Space is a normal folder, so any AI tool that can read files can use it: po
 | `tekt space sync [name]` | Sync now: every Space, or just one |
 | `tekt space autosync on` / `off` | Sync every 10 minutes in the background |
 | `tekt space remove <name>` | Disconnect a Space. Every file stays where it is. |
-| `tekt status` | Your tools and your Spaces in one check |
+| `tekt connect [app]` | Let Claude Code, Claude Desktop and Codex use your Spaces |
+| `tekt status` | Your tools, your Spaces, and which AI apps are connected, in one check |
 
 ## How it works
 
