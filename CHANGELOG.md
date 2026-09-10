@@ -8,6 +8,16 @@ permalink: /changelog/index.html
 
 # Changelog
 
+## v0.3.0 — Connect
+
+Connect your computer to your AI in one step (#54).
+
+- **`tekt connect [app]`** lets the AI apps on your computer read and write your Spaces. It registers the MCP filesystem server `tekt-spaces`, scoped to `~/Tekt/Spaces`, with **Claude Code** (user scope), **Claude Desktop** (`claude_desktop_config.json`) and **Codex** (`~/.codex/config.toml`). With no app named, it connects every one it finds.
+- **Safe to re-run.** Tekt replaces only its own entry and keeps every other server and setting. It saves a `.bak-tekt` copy of each config before editing, and leaves invalid JSON untouched.
+- **`tekt status`** shows which AI apps are connected to your Spaces.
+- **Windows.** The same `connect` command in `install.ps1`. It launches the server through `cmd /c npx`, which native Windows needs.
+- **Fix: joining a Space works on the first try** (#57). Tekt no longer writes its own README when the shared folder already has one. On rclone ≥ 1.66, the first sync keeps the newer copy of any file that differs, instead of stopping with "out of sync".
+
 ## v0.2.0 — Spaces
 
 Share documents, knowledge and skills with your AI and your people, through the storage you already use (#53).

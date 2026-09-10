@@ -1396,6 +1396,10 @@ space_flags() {
     *--conflict-resolve*)   # rclone ≥ 1.66: newest wins, the other copy is kept
       SPACE_FLAGS+=(--conflict-resolve newer --conflict-loser num --resilient --recover --max-lock 2m) ;;
   esac
+  SPACE_RESYNC=(--resync)
+  case "$help" in
+    *--resync-mode*) SPACE_RESYNC+=(--resync-mode newer) ;;   # first sync: the newer copy of a file wins
+  esac
 }
 
 space_readme() {
@@ -1493,7 +1497,11 @@ space_add() {
   fi
 
   mkdir -p "$dir/docs" "$dir/knowledge" "$dir/skills"
-  [ -f "$dir/README.md" ] || space_readme "$name" > "$dir/README.md"
+  # Joining an existing Space? Its README arrives with the first sync — writing our own
+  # copy first makes the two sides disagree and the first sync fail.
+  if [ ! -f "$dir/README.md" ] && ! rclone lsf "$remote:$folder" --files-only --max-depth 1 2>/dev/null | grep -x "README.md" >/dev/null; then
+    space_readme "$name" > "$dir/README.md"
+  fi
   : > "$dir/.tekt-space"
   space_set_meta "$dir" name "$name"
   space_set_meta "$dir" provider "$provider"
@@ -1515,6 +1523,7 @@ space_add() {
     log "They run:  tekt space add $name $provider \"$folder\""
     if [ "$backend" = drive ]; then log "  (Folder shared with them? They add a shortcut to it in My Drive first.)"; fi
   fi
+  log "Let your AI apps use it:        tekt connect"
   log "Keep it in sync automatically:  tekt space autosync on"
 }
 
@@ -1530,7 +1539,7 @@ space_sync() {
     any=1
     remote="$(space_meta "$dir" remote)"; folder="$(space_meta "$dir" folder)"
     local extra=()
-    if [ "$(space_meta "$dir" initialized)" != 1 ]; then extra=(--resync); fi   # first sync merges both sides
+    if [ "$(space_meta "$dir" initialized)" != 1 ]; then extra=("${SPACE_RESYNC[@]}"); fi   # first sync merges both sides
     log "Syncing $name ↔ $remote:$folder"
     if rclone bisync "$remote:$folder" "$dir" ${extra[@]+"${extra[@]}"} "${SPACE_FLAGS[@]}" -q; then
       space_set_meta "$dir" initialized 1
@@ -1592,6 +1601,124 @@ space_autosync() {
   success "Autosync on: your Spaces sync every 10 minutes. Turn it off with:  tekt space autosync off"
 }
 
+# =============================================================================
+# Connect — let your AI apps use your Spaces (tekt connect [app])
+# Registers the MCP filesystem server, scoped to ~/Tekt/Spaces, with each AI
+# app on this computer: Claude Code, Claude Desktop, Codex. Re-running replaces
+# Tekt's own entry and leaves everything else in those configs alone.
+# =============================================================================
+TEKT_MCP_NAME="tekt-spaces"
+TEKT_MCP_PKG="@modelcontextprotocol/server-filesystem"
+
+claude_desktop_config() {
+  case "$(os_type)" in
+    macos) echo "$HOME/Library/Application Support/Claude/claude_desktop_config.json" ;;
+    *)     echo "${XDG_CONFIG_HOME:-$HOME/.config}/Claude/claude_desktop_config.json" ;;
+  esac
+}
+
+codex_config() { echo "${CODEX_HOME:-$HOME/.codex}/config.toml"; }
+
+connect_claude_code() {
+  if ! command_exists claude; then
+    warn "Claude Code isn't installed — skipping. Install: curl -fsSL https://claude.ai/install.sh | bash"
+    return 1
+  fi
+  claude mcp remove --scope user "$TEKT_MCP_NAME" >/dev/null 2>&1 || true
+  if claude mcp add --scope user "$TEKT_MCP_NAME" -- npx -y "$TEKT_MCP_PKG" "$TEKT_SPACES" >/dev/null 2>&1; then
+    success "Claude Code can use your Spaces (MCP server '$TEKT_MCP_NAME')"
+  else
+    warn "Claude Code didn't accept the server. Add it by hand:"
+    warn "  claude mcp add --scope user $TEKT_MCP_NAME -- npx -y $TEKT_MCP_PKG \"$TEKT_SPACES\""
+    return 1
+  fi
+}
+
+connect_claude_desktop() {
+  local cfg merged=1
+  cfg="$(claude_desktop_config)"
+  if ! claude_desktop_installed && [ ! -d "$(dirname "$cfg")" ]; then
+    warn "Claude Desktop isn't installed — skipping. Get it at https://claude.ai/download"
+    return 1
+  fi
+  mkdir -p "$(dirname "$cfg")"
+  if [ -f "$cfg" ]; then cp "$cfg" "$cfg.bak-tekt"; fi
+  if command_exists python3; then
+    python3 - "$cfg" "$TEKT_MCP_NAME" "$TEKT_MCP_PKG" "$TEKT_SPACES" <<'PY' || merged=0
+import json, os, sys
+path, name, pkg, spaces = sys.argv[1:5]
+data = {}
+if os.path.exists(path) and os.path.getsize(path) > 0:
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+data.setdefault("mcpServers", {})[name] = {"command": "npx", "args": ["-y", pkg, spaces]}
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+PY
+  elif command_exists node; then
+    node -e '
+const fs = require("fs"); const [path, name, pkg, spaces] = process.argv.slice(1);
+let data = {}; if (fs.existsSync(path) && fs.statSync(path).size) data = JSON.parse(fs.readFileSync(path, "utf8"));
+(data.mcpServers ||= {})[name] = { command: "npx", args: ["-y", pkg, spaces] };
+fs.writeFileSync(path, JSON.stringify(data, null, 2) + "\n");' "$cfg" "$TEKT_MCP_NAME" "$TEKT_MCP_PKG" "$TEKT_SPACES" || merged=0
+  else
+    merged=0
+  fi
+  if [ "$merged" -eq 1 ]; then
+    success "Claude Desktop can use your Spaces after you restart it ($cfg)"
+  else
+    warn "Couldn't update $cfg (needs python3 or node, and the file must be valid JSON). Your original is untouched."
+    return 1
+  fi
+}
+
+connect_codex() {
+  if ! command_exists codex; then
+    warn "Codex CLI isn't installed — skipping. Install: npm install -g @openai/codex"
+    return 1
+  fi
+  local cfg; cfg="$(codex_config)"
+  mkdir -p "$(dirname "$cfg")"
+  if [ -f "$cfg" ]; then
+    cp "$cfg" "$cfg.bak-tekt"
+    # drop Tekt's previous block (and trailing blank lines), keep everything else
+    awk -v h="[mcp_servers.$TEKT_MCP_NAME]" '$0 == h { skip = 1; next } /^\[/ { skip = 0 } !skip' "$cfg.bak-tekt" \
+      | awk 'NF { while (n > 0) { print ""; n-- } print; next } { n++ }' > "$cfg"
+  fi
+  printf '\n[mcp_servers.%s]\ncommand = "npx"\nargs = ["-y", "%s", "%s"]\n' "$TEKT_MCP_NAME" "$TEKT_MCP_PKG" "$TEKT_SPACES" >> "$cfg"
+  success "Codex can use your Spaces ($cfg)"
+}
+
+tekt_connect() {
+  local app="${1:-all}" connected=0
+  section "Connect your AI to your Spaces"
+  mkdir -p "$TEKT_SPACES"
+  case "$app" in
+    claude-code|claude|code) connect_claude_code    && connected=1 ;;
+    claude-desktop|desktop)  connect_claude_desktop && connected=1 ;;
+    codex)                   connect_codex          && connected=1 ;;
+    all)
+      if command_exists claude; then connect_claude_code && connected=1; fi
+      if claude_desktop_installed || [ -d "$(dirname "$(claude_desktop_config)")" ]; then
+        connect_claude_desktop && connected=1
+      fi
+      if command_exists codex; then connect_codex && connected=1; fi
+      ;;
+    *) error "Unknown AI app '$app'. Use: claude-code, claude-desktop, codex or all."; return 1 ;;
+  esac
+  if ! command_exists npx; then
+    warn "Your AI apps start the Spaces server with npx, which comes with Node.js. Install it first:  tekt install"
+  fi
+  echo ""
+  if [ "$connected" -eq 0 ]; then
+    warn "No AI app connected yet. Tekt connects Claude Code, Claude Desktop and Codex."
+  fi
+  log "Other MCP apps: add a server with  command: npx   args: -y $TEKT_MCP_PKG $TEKT_SPACES"
+  log "Running MCPHub (tekt mcp)? Apps can also use http://localhost:3000/mcp — it serves /spaces too."
+  log "Try it: ask your AI \"What's in my team Space?\""
+}
+
 # The tekt command: a copy of this script on your PATH (tekt space …, tekt status)
 install_tekt_cli() {
   ensure_local_bin
@@ -1620,6 +1747,8 @@ Share with your AI and your people
   space sync [name]                    Sync now (every Space, or one)
   space remove <name>                  Disconnect a Space (keeps every file)
   space autosync on|off                Sync every 10 minutes in the background
+  connect [app]                        Let your AI apps use your Spaces
+                                       (app: claude-code, claude-desktop, codex; default: every one found)
 
 Set up and check
   install        Install all Tekt tools (what the one-line installer runs)
@@ -1711,6 +1840,7 @@ print_summary() {
   log "  Sovrant Web :5100       # cd \$TEKT_INSTANCE/sovrant && dotnet run --project src/Sovrant.Web"
   log "Restart your terminal/session to reload PATH (required after some installs)."
   log "Share a folder with your AI and your people:  tekt space add team drive   (guide: https://tekt.md/spaces/)"
+  log "Let your AI apps use your Spaces:              tekt connect"
   log "OpenClaw onboarding is intentionally deferred: run 'openclaw onboard --install-daemon' when ready."
   log "Docs: https://tekt.md"
   echo ""
@@ -1852,6 +1982,20 @@ tekt_status() {
   done
   if [ "$sfound" -eq 0 ]; then printf "  ${YELLOW}?${RESET}  %-18s %s\n" "No Spaces yet" "tekt space add team drive"; fi
 
+  echo ""
+  echo -e "${BOLD}AI apps connected to your Spaces${RESET}"
+  local capps=0
+  if grep -q "\"$TEKT_MCP_NAME\"" "$HOME/.claude.json" 2>/dev/null; then
+    printf "  ${GREEN}✓${RESET}  %-18s %s\n" "Claude Code" "uses your Spaces"; capps=1
+  fi
+  if grep -q "\"$TEKT_MCP_NAME\"" "$(claude_desktop_config)" 2>/dev/null; then
+    printf "  ${GREEN}✓${RESET}  %-18s %s\n" "Claude Desktop" "uses your Spaces"; capps=1
+  fi
+  if grep -q "^\[mcp_servers\.$TEKT_MCP_NAME\]" "$(codex_config)" 2>/dev/null; then
+    printf "  ${GREEN}✓${RESET}  %-18s %s\n" "Codex" "uses your Spaces"; capps=1
+  fi
+  if [ "$capps" -eq 0 ]; then printf "  ${YELLOW}?${RESET}  %-18s %s\n" "None yet" "tekt connect"; fi
+
   # ── Totals ──
   local total=$((installed + missing))
   echo ""
@@ -1980,6 +2124,9 @@ case "${1:-}" in
     ;;
   cli)
     install_tekt_cli
+    ;;
+  connect)
+    tekt_connect "${2:-all}"
     ;;
   install)
     main

@@ -25,6 +25,9 @@
 #         tekt space remove <name>                    # disconnect (files are kept)
 #         tekt space autosync on|off                  # sync every 10 minutes
 #
+# Connect - let your AI apps use your Spaces (MCP filesystem server "tekt-spaces"):
+#         tekt connect [app]    # all (default), claude-code, claude-desktop, codex
+#
 # One-liner: irm https://tekt.md/install.ps1 | iex
 # Tip: for the full Linux-parity experience, install WSL2 (wsl --install)
 #      and run `bash install.sh` inside it.
@@ -76,6 +79,8 @@ $TektAgentsDir = Join-Path $TektInstance "agents"
 $TektSpaces    = if ($env:TEKT_SPACES) { $env:TEKT_SPACES } else { Join-Path $TektHome "Spaces" }
 $TektBin       = Join-Path $HOME ".local\bin"
 $TektCliPs1    = Join-Path $TektBin "tekt.ps1"
+$TektMcpName   = "tekt-spaces"
+$TektMcpPkg    = "@modelcontextprotocol/server-filesystem"
 $EmDash        = [string][char]0x2014   # built from char codes so the file parses the same under any encoding
 $MidDot        = [string][char]0x00B7
 
@@ -619,8 +624,16 @@ function Space-Add($rawName, $provider, $folder) {
     foreach ($sub in "docs", "knowledge", "skills") {
         New-Item -ItemType Directory -Force -Path (Join-Path $dir $sub) | Out-Null
     }
+    # Only write README.md when neither side has one: a joiner's fresh copy would carry a
+    # different modtime than the creator's and make the first bisync --resync abort.
+    # A failed lsf (remote folder doesn't exist yet) counts as "no README".
     $readme = Join-Path $dir "README.md"
-    if (-not (Test-Path -LiteralPath $readme)) {
+    $needReadme = -not (Test-Path -LiteralPath $readme)
+    if ($needReadme) {
+        $remoteFiles = @(& rclone lsf "${remote}:$folder" --files-only --max-depth 1 2>$null)
+        if (@($remoteFiles | Where-Object { ([string]$_).Trim() -ceq "README.md" }).Count -gt 0) { $needReadme = $false }
+    }
+    if ($needReadme) {
         $readmeLines = @(
             "# $name $EmDash a Tekt Space",
             "",
@@ -650,6 +663,7 @@ function Space-Add($rawName, $provider, $folder) {
         Log "They run:  tekt space add $name $provider `"$folder`""
         if ($backend -eq "drive") { Log "  (Folder shared with them? Add a shortcut to it in My Drive first.)" }
     }
+    Log "Let your AI apps use it:        tekt connect"
     Log "Keep it in sync automatically:  tekt space autosync on"
 }
 
@@ -672,9 +686,13 @@ function Space-Sync($only) {
                "--exclude", "Thumbs.db",
                "--exclude", '~$*',
                "--exclude", "*.tmp")
+    $resyncFlags = @("--resync")
     $bisyncHelp = (& rclone bisync --help 2>&1 | Out-String)
     if ($bisyncHelp.Contains("--conflict-resolve")) {
         $flags += @("--conflict-resolve", "newer", "--conflict-loser", "num", "--resilient", "--recover", "--max-lock", "2m")
+    }
+    if ($bisyncHelp.Contains("--resync-mode")) {
+        $resyncFlags += @("--resync-mode", "newer")   # first sync: the newer copy of a file wins
     }
 
     foreach ($dir in $dirs) {
@@ -683,7 +701,7 @@ function Space-Sync($only) {
         if (-not $remote) { $remote = "tekt-$name" }
         $folder = Get-SpaceMeta $dir "folder"
         $rcArgs = @("bisync", "${remote}:$folder", $dir) + $flags
-        if ((Get-SpaceMeta $dir "initialized") -ne "1") { $rcArgs += "--resync" }
+        if ((Get-SpaceMeta $dir "initialized") -ne "1") { $rcArgs += $resyncFlags }
         $rcArgs += "-q"
         Log "Syncing $name..."
         & rclone @rcArgs
@@ -774,6 +792,160 @@ function Space-Help {
     Write-Host "  autosync on|off                 Sync every 10 minutes in the background"
 }
 
+# -- Connect: let your AI apps use your Spaces (tekt connect [app]) -------------
+# Registers the MCP filesystem server, scoped to $TektSpaces, with Claude Code,
+# Claude Desktop and Codex. Re-running replaces Tekt's own entry and leaves
+# everything else in those configs alone. Native Windows launches npx via cmd.
+function Get-ClaudeDesktopConfig {
+    $appData = if ($env:APPDATA) { $env:APPDATA } else { Join-Path $HOME "AppData\Roaming" }
+    Join-Path (Join-Path $appData "Claude") "claude_desktop_config.json"
+}
+
+function Get-CodexConfig {
+    $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME ".codex" }
+    Join-Path $codexHome "config.toml"
+}
+
+function Connect-ClaudeCode {
+    if (-not (Test-Cmd "claude")) {
+        Warn "Claude Code isn't installed - skipping. Install: irm https://claude.ai/install.ps1 | iex"
+        return $false
+    }
+    & claude @("mcp", "remove", "--scope", "user", $TektMcpName) 2>$null | Out-Null
+    # '--' is passed as a quoted array element so PowerShell hands it to claude untouched
+    & claude @("mcp", "add", "--scope", "user", $TektMcpName, "--", "cmd", "/c", "npx", "-y", $TektMcpPkg, $TektSpaces) 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        Success "Claude Code can use your Spaces (MCP server '$TektMcpName')"
+        return $true
+    }
+    Warn "Claude Code didn't accept the server. Add it by hand:"
+    Warn "  claude mcp add --scope user $TektMcpName -- cmd /c npx -y $TektMcpPkg `"$TektSpaces`""
+    return $false
+}
+
+function Connect-ClaudeDesktop {
+    $cfg    = Get-ClaudeDesktopConfig
+    $cfgDir = Split-Path $cfg -Parent
+    if (-not (Test-ClaudeDesktop) -and -not (Test-Path -LiteralPath $cfgDir)) {
+        Warn "Claude Desktop isn't installed - skipping. Get it at https://claude.ai/download"
+        return $false
+    }
+    New-Item -ItemType Directory -Force -Path $cfgDir | Out-Null
+    $untouched = "Couldn't update $cfg (the file must be valid JSON). Your original is untouched."
+
+    $data = $null
+    if (Test-Path -LiteralPath $cfg) {
+        try { Copy-Item -LiteralPath $cfg -Destination "$cfg.bak-tekt" -Force -ErrorAction Stop }
+        catch { Warn "Couldn't back up $cfg, so it was left alone."; return $false }
+        $raw = [IO.File]::ReadAllText($cfg)
+        if ($raw.Trim()) {
+            try { $data = $raw | ConvertFrom-Json -ErrorAction Stop }
+            catch { Warn $untouched; return $false }
+            if ($data -isnot [System.Management.Automation.PSCustomObject]) { Warn $untouched; return $false }
+        }
+    }
+    if ($null -eq $data) { $data = [pscustomobject]@{} }
+
+    # PowerShell 5.1 gives a PSCustomObject: add/replace properties with Add-Member -Force
+    $existing = $data.PSObject.Properties["mcpServers"]
+    if (-not $existing -or $null -eq $existing.Value) {
+        $data | Add-Member -NotePropertyName "mcpServers" -NotePropertyValue ([pscustomobject]@{}) -Force
+    } elseif ($existing.Value -isnot [System.Management.Automation.PSCustomObject]) {
+        Warn $untouched
+        return $false
+    }
+    $server = [pscustomobject]@{ command = "cmd"; args = @("/c", "npx", "-y", $TektMcpPkg, $TektSpaces) }
+    $data.mcpServers | Add-Member -NotePropertyName $TektMcpName -NotePropertyValue $server -Force
+
+    try {
+        $json = $data | ConvertTo-Json -Depth 20
+        [IO.File]::WriteAllText($cfg, $json + "`n", (New-Object System.Text.UTF8Encoding $false))
+    } catch {
+        Warn "Couldn't write $cfg. Your previous version is in $cfg.bak-tekt"
+        return $false
+    }
+    Success "Claude Desktop can use your Spaces after you restart it ($cfg)"
+    return $true
+}
+
+function Connect-Codex {
+    if (-not (Test-Cmd "codex")) {
+        Warn "Codex CLI isn't installed - skipping. Install: npm install -g @openai/codex"
+        return $false
+    }
+    $cfg    = Get-CodexConfig
+    $header = "[mcp_servers.$TektMcpName]"
+    New-Item -ItemType Directory -Force -Path (Split-Path $cfg -Parent) | Out-Null
+
+    $lines = [System.Collections.Generic.List[string]]::new()
+    if (Test-Path -LiteralPath $cfg) {
+        try { Copy-Item -LiteralPath $cfg -Destination "$cfg.bak-tekt" -Force -ErrorAction Stop }
+        catch { Warn "Couldn't back up $cfg, so it was left alone."; return $false }
+        # drop Tekt's previous block (up to the next [section]), keep everything else
+        $skip = $false
+        foreach ($line in [IO.File]::ReadAllLines($cfg)) {
+            if ($line.Trim() -eq $header) { $skip = $true; continue }
+            if ($line.StartsWith("[")) { $skip = $false }
+            if (-not $skip) { $lines.Add($line) }
+        }
+        while ($lines.Count -gt 0 -and -not $lines[$lines.Count - 1].Trim()) { $lines.RemoveAt($lines.Count - 1) }
+    }
+
+    # TOML literal strings ('...') need no backslash escaping; a path containing ' needs a basic string
+    $spacesToml = if ($TektSpaces.Contains("'")) {
+        '"' + (($TektSpaces -replace '\\', '\\') -replace '"', '\"') + '"'
+    } else {
+        "'" + $TektSpaces + "'"
+    }
+    if ($lines.Count -gt 0) { $lines.Add("") }
+    $lines.Add($header)
+    $lines.Add('command = "cmd"')
+    $lines.Add("args = ['/c', 'npx', '-y', '$TektMcpPkg', $spacesToml]")
+
+    try {
+        [IO.File]::WriteAllText($cfg, (($lines -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding $false))
+    } catch {
+        Warn "Couldn't write $cfg. Your previous version is in $cfg.bak-tekt"
+        return $false
+    }
+    Success "Codex can use your Spaces ($cfg)"
+    return $true
+}
+
+function Tekt-Connect($app) {
+    if (-not $app) { $app = "all" }
+    Section "Connect your AI to your Spaces"
+    New-Item -ItemType Directory -Force -Path $TektSpaces | Out-Null
+    $connected = $false
+    switch (([string]$app).ToLowerInvariant()) {
+        "claude-code"    { if (Connect-ClaudeCode)    { $connected = $true } }
+        "claude"         { if (Connect-ClaudeCode)    { $connected = $true } }
+        "code"           { if (Connect-ClaudeCode)    { $connected = $true } }
+        "claude-desktop" { if (Connect-ClaudeDesktop) { $connected = $true } }
+        "desktop"        { if (Connect-ClaudeDesktop) { $connected = $true } }
+        "codex"          { if (Connect-Codex)         { $connected = $true } }
+        "all" {
+            if (Test-Cmd "claude") { if (Connect-ClaudeCode) { $connected = $true } }
+            if ((Test-ClaudeDesktop) -or (Test-Path -LiteralPath (Split-Path (Get-ClaudeDesktopConfig) -Parent))) {
+                if (Connect-ClaudeDesktop) { $connected = $true }
+            }
+            if (Test-Cmd "codex") { if (Connect-Codex) { $connected = $true } }
+        }
+        default {
+            Err "Unknown AI app '$app'. Use: claude-code, claude-desktop, codex or all."
+            return
+        }
+    }
+    if (-not (Test-Cmd "npx")) {
+        Warn "Your AI apps start the Spaces server with npx, which comes with Node.js. Install it first:  winget install OpenJS.NodeJS.LTS"
+    }
+    Write-Host ""
+    if (-not $connected) { Warn "No AI app connected yet. Tekt connects Claude Code, Claude Desktop and Codex." }
+    Log "Other MCP apps: add a server with  command: cmd   args: /c npx -y $TektMcpPkg $TektSpaces"
+    Log "Running MCPHub (tekt mcp)? Apps can also use http://localhost:3000/mcp - it serves /spaces too."
+    Log "Try it: ask your AI `"What's in my team Space?`""
+}
+
 # -- Status ---------------------------------------------------------------------
 function Tekt-Status {
     Write-Host "`nTekt Environment Status - https://tekt.md`n" -ForegroundColor Cyan
@@ -833,6 +1005,21 @@ function Tekt-Status {
             Write-Host ("  [OK]  {0,-16} last sync {1}" -f (Split-Path $sd -Leaf), $last) -ForegroundColor Green
         }
     }
+    Write-Host "`n  AI apps connected to your Spaces" -ForegroundColor Cyan
+    $capps     = 0
+    $ccJson    = Join-Path $HOME ".claude.json"
+    $cdJson    = Get-ClaudeDesktopConfig
+    $codexToml = Get-CodexConfig
+    if ((Test-Path -LiteralPath $ccJson) -and (Select-String -LiteralPath $ccJson -SimpleMatch "`"$TektMcpName`"" -Quiet)) {
+        Write-Host ("  [OK]  {0,-16} uses your Spaces" -f "Claude Code") -ForegroundColor Green; $capps++
+    }
+    if ((Test-Path -LiteralPath $cdJson) -and (Select-String -LiteralPath $cdJson -SimpleMatch "`"$TektMcpName`"" -Quiet)) {
+        Write-Host ("  [OK]  {0,-16} uses your Spaces" -f "Claude Desktop") -ForegroundColor Green; $capps++
+    }
+    if ((Test-Path -LiteralPath $codexToml) -and (Select-String -LiteralPath $codexToml -Pattern ('^\[mcp_servers\.' + [regex]::Escape($TektMcpName) + '\]') -Quiet)) {
+        Write-Host ("  [OK]  {0,-16} uses your Spaces" -f "Codex") -ForegroundColor Green; $capps++
+    }
+    if ($capps -eq 0) { Write-Host "  [ ?]  None yet - tekt connect" -ForegroundColor Yellow }
     Write-Host "`n  $installed installed / $missing missing`n"
     if ($missing -gt 0) { Log "Run '.\install.ps1' to install everything." }
     Log "If tools were just installed, pause and restart PowerShell, then run '.\install.ps1 status' again."
@@ -877,6 +1064,7 @@ function Main {
 
     Write-Host ""
     Log "Staged (tekt.cloud): bring up with  .\install.ps1 mcp   and   .\install.ps1 ui"
+    Log "Let your AI apps use your Spaces:  tekt connect"
     Log "PATH is refreshed during install. If a new command still isn't found, open a new PowerShell window, then run:  .\install.ps1 status"
 }
 
@@ -886,6 +1074,11 @@ switch ($Command) {
     "ui"     { Setup-Ui }
     "share"  { Tekt-Share $Arg }
     "cli"    { Install-TektCli }
+    "connect" {
+        Refresh-SessionPath
+        $app = if ($Rest.Count -ge 1 -and $Rest[0]) { $Rest[0] } else { "all" }
+        Tekt-Connect $app
+    }
     "space"  {
         Refresh-SessionPath
         $sub = if ($Rest.Count -ge 1 -and $Rest[0]) { $Rest[0] } else { "list" }
@@ -905,7 +1098,7 @@ switch ($Command) {
         }
     }
     "help"   {
-        Write-Host "Usage: .\install.ps1 [status|catalog|mcp|ui|share <port>|space ...|cli|help]"
+        Write-Host "Usage: .\install.ps1 [status|catalog|mcp|ui|share <port>|space ...|connect [app]|cli|help]"
         Write-Host "       (after 'cli' you can type 'tekt' instead of '.\install.ps1')"
         Write-Host "  (none)        Install all Tekt tools"
         Write-Host "  status        Check which tools are installed"
@@ -920,6 +1113,8 @@ switch ($Command) {
         Write-Host "  space sync [name]                     Two-way sync now"
         Write-Host "  space remove <name>                   Disconnect a Space (your files are kept)"
         Write-Host "  space autosync on|off                 Sync every 10 minutes in the background"
+        Write-Host ""
+        Write-Host "  connect [app]  Let your AI apps use your Spaces: all (default), claude-code, claude-desktop, codex"
         Write-Host ""
         Write-Host "Windows note: after installs, restart PowerShell, then run .\install.ps1 status"
     }
