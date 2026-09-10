@@ -13,7 +13,9 @@
 # Supported: macOS (Intel + Apple Silicon), Ubuntu/Debian, Fedora/RHEL, WSL2
 # Usage:     curl -fsSL https://tekt.md/install.sh | bash
 #            — or —
-#            bash install.sh [status|catalog|mcp|ui|share|help]
+#            bash install.sh [status|catalog|mcp|ui|share|space|cli|help]
+# Spaces:    tekt space add team drive   — share a folder with your AI and your
+#            people through Google Drive, OneDrive, Dropbox, Box, Nextcloud or a NAS
 # Catalog:   version pins live in tekt.catalog.yaml (same directory)
 # =============================================================================
 
@@ -63,6 +65,8 @@ TEKT_WORKSPACE="$TEKT_INSTANCE/workspace"
 TEKT_MCP_DIR="$TEKT_INSTANCE/mcp"
 TEKT_CLOUD_DIR="$TEKT_INSTANCE/cloud"
 TEKT_AGENTS_DIR="$TEKT_INSTANCE/agents"
+TEKT_SPACES="${TEKT_SPACES:-$TEKT_HOME/Spaces}"   # shared folders (tekt space …)
+TEKT_BIN="${TEKT_BIN:-$HOME/.local/bin/tekt}"     # the tekt command
 
 # ── Catalog pins (tekt.catalog.yaml overrides the defaults above) ─────────────
 load_catalog_pins() {
@@ -1164,7 +1168,7 @@ install_sovrant() {
 setup_mcphub() {
   section "MCPHub + curated MCP servers"
 
-  mkdir -p "$TEKT_MCP_DIR" "$TEKT_WORKSPACE"
+  mkdir -p "$TEKT_MCP_DIR" "$TEKT_WORKSPACE" "$TEKT_SPACES"
 
   if [ ! -f "$TEKT_MCP_DIR/mcp_settings.json" ]; then
     cat > "$TEKT_MCP_DIR/mcp_settings.json" <<'JSON'
@@ -1172,7 +1176,7 @@ setup_mcphub() {
   "mcpServers": {
     "filesystem": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"]
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/workspace", "/spaces"]
     },
     "fetch": {
       "command": "uvx",
@@ -1205,6 +1209,7 @@ services:
     volumes:
       - ./mcp_settings.json:/app/mcp_settings.json
       - ../workspace:/workspace
+      - ${TEKT_SPACES}:/spaces
     restart: unless-stopped
 EOF
     success "Wrote $TEKT_MCP_DIR/docker-compose.yml"
@@ -1328,6 +1333,309 @@ tekt_share() {
 }
 
 # =============================================================================
+# Spaces — share documents, knowledge and skills with your AI and your people
+# (tekt space add | list | sync | remove | autosync)
+#
+# A Space is a folder that stays in sync with storage people already use —
+# Google Drive, OneDrive, Dropbox, Box, Nextcloud, or a folder on a NAS — via
+# rclone bisync. Every Space has the same layout: docs/ knowledge/ skills/.
+# Metadata lives in <space>/.tekt-space (key=value); install.ps1 reads the same.
+# =============================================================================
+space_backend() {    # friendly storage word → rclone backend
+  case "$1" in
+    drive|gdrive|google|googledrive|google-drive) echo drive ;;
+    onedrive|microsoft|sharepoint)                echo onedrive ;;
+    dropbox)                                      echo dropbox ;;
+    box)                                          echo box ;;
+    nextcloud|owncloud|webdav)                    echo webdav ;;
+    folder|local|nas|path)                        echo alias ;;
+    s3|minio|r2|b2)                               echo s3 ;;
+    *) return 1 ;;
+  esac
+}
+
+space_label() {
+  case "$1" in
+    drive)    echo "Google Drive" ;;
+    onedrive) echo "OneDrive" ;;
+    dropbox)  echo "Dropbox" ;;
+    box)      echo "Box" ;;
+    webdav)   echo "Nextcloud / WebDAV" ;;
+    alias)    echo "a folder" ;;
+    s3)       echo "S3" ;;
+    *)        echo "$1" ;;
+  esac
+}
+
+space_now()  { date -u +%Y-%m-%dT%H:%M:%SZ; }
+
+space_meta() {       # space_meta <dir> <key>
+  { grep -E "^$2=" "$1/.tekt-space" 2>/dev/null || true; } | head -1 | cut -d= -f2-
+}
+
+space_set_meta() {   # space_set_meta <dir> <key> <value>
+  local f="$1/.tekt-space" tmp
+  tmp="$(mktemp)"
+  { grep -vE "^$2=" "$f" 2>/dev/null || true; printf '%s=%s\n' "$2" "$3"; } > "$tmp"
+  mv "$tmp" "$f"
+}
+
+space_ask() {        # read from the terminal, even under curl | bash
+  local answer=""
+  read -rp "  $1" answer </dev/tty || true
+  printf '%s' "$answer"
+}
+
+space_flags() {
+  SPACE_FLAGS=(--create-empty-src-dirs
+    --exclude "/.tekt-space*" --exclude ".DS_Store" --exclude "Thumbs.db"
+    --exclude '~$*' --exclude "*.tmp")
+  local help
+  help="$(rclone bisync --help 2>/dev/null || true)"
+  case "$help" in
+    *--conflict-resolve*)   # rclone ≥ 1.66: newest wins, the other copy is kept
+      SPACE_FLAGS+=(--conflict-resolve newer --conflict-loser num --resilient --recover --max-lock 2m) ;;
+  esac
+}
+
+space_readme() {
+  cat <<EOF
+# $1 — a Tekt Space
+
+This folder is shared between people and their AI tools with Tekt (https://tekt.md/spaces/).
+Everyone who has it keeps a synced copy on their own computer.
+
+- docs/       Documents you want your AI and your colleagues to read
+- knowledge/  Notes, decisions and reference material worth keeping
+- skills/     Skills for AI agents: one folder per skill, each with a SKILL.md
+
+Join it from your computer:  tekt space add $1 <drive|onedrive|dropbox|box|nextcloud|folder>
+EOF
+}
+
+space_add() {
+  local name="${1:-}" provider="${2:-}" folder="${3:-}"
+  section "Add a Space"
+  [ -n "$name" ] || name="$(space_ask "Name this Space (e.g. team, family, research): ")"
+  name="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9-' '-' | sed 's/^-*//; s/-*$//')"
+  if [ -z "$name" ]; then error "A Space needs a name, e.g.  tekt space add team drive"; return 1; fi
+
+  if [ -z "$provider" ]; then
+    echo "  Where should it live? Pick what your people already use:"
+    echo "    1) Google Drive   2) OneDrive / SharePoint   3) Dropbox   4) Box"
+    echo "    5) Nextcloud      6) A folder on this computer or a network drive"
+    echo "    7) S3 (advanced)"
+    case "$(space_ask "Choose 1-7: ")" in
+      1) provider=drive ;;     2) provider=onedrive ;; 3) provider=dropbox ;; 4) provider=box ;;
+      5) provider=nextcloud ;; 6) provider=folder ;;   7) provider=s3 ;;
+      *) error "Pick a number from 1 to 7."; return 1 ;;
+    esac
+  fi
+  local backend
+  if ! backend="$(space_backend "$provider")"; then
+    error "Unknown storage '$provider'. Use: drive, onedrive, dropbox, box, nextcloud, folder or s3."
+    return 1
+  fi
+
+  if ! command_exists rclone; then
+    install_rclone || true
+    if ! command_exists rclone; then error "Spaces need rclone — install it from https://rclone.org/install/ and try again."; return 1; fi
+  fi
+
+  local remote="tekt-$name" dir="$TEKT_SPACES/$name"
+  if [ -f "$dir/.tekt-space" ]; then
+    warn "Space '$name' already exists at $dir — syncing it instead."
+    space_sync "$name"
+    return
+  fi
+
+  if rclone listremotes 2>/dev/null | grep -x "$remote:" >/dev/null; then
+    success "Reusing your existing connection '$remote'"
+    if [ "$backend" = alias ]; then folder=""; fi
+  else
+    case "$backend" in
+      alias)
+        [ -n "$folder" ] || folder="$(space_ask "Path to the shared folder (e.g. /mnt/nas/team or ~/Dropbox/Team): ")"
+        folder="${folder/#\~/$HOME}"
+        if [ -z "$folder" ] || ! mkdir -p "$folder"; then error "Can't reach that folder: ${folder:-<empty>}"; return 1; fi
+        rclone config create "$remote" alias remote="$folder" >/dev/null
+        folder=""   # the connection itself points at the folder
+        ;;
+      webdav)
+        local url user pass=""
+        url="$(space_ask "Nextcloud address (e.g. https://cloud.example.com): ")"
+        user="$(space_ask "Nextcloud username: ")"
+        log "Use an app password (Nextcloud → Settings → Security). rclone stores it obscured on this computer."
+        read -rsp "  App password: " pass </dev/tty || true; echo
+        rclone config create "$remote" webdav url="${url%/}/remote.php/dav/files/$user" vendor=nextcloud \
+          user="$user" pass="$pass" --obscure >/dev/null \
+          || { error "Couldn't connect to Nextcloud. Check the address and the app password."; return 1; }
+        ;;
+      s3)
+        log "rclone will ask for the endpoint, access key and secret."
+        rclone config create "$remote" s3 --all </dev/tty || { error "S3 setup didn't finish."; return 1; }
+        ;;
+      *)
+        log "Your browser will open so you can sign in to $(space_label "$backend"). Tekt never sees your password."
+        rclone config create "$remote" "$backend" </dev/tty \
+          || { error "Sign-in didn't finish. Try again:  tekt space add $name $provider"; return 1; }
+        ;;
+    esac
+    success "Connected to $(space_label "$backend") as '$remote'"
+  fi
+
+  if [ -z "$folder" ] && [ "$backend" != alias ]; then
+    if [ "$backend" = s3 ]; then
+      folder="$(space_ask "Bucket and folder (e.g. my-bucket/tekt/$name): ")"
+    else
+      folder="Tekt/$name"
+    fi
+  fi
+
+  mkdir -p "$dir/docs" "$dir/knowledge" "$dir/skills"
+  [ -f "$dir/README.md" ] || space_readme "$name" > "$dir/README.md"
+  : > "$dir/.tekt-space"
+  space_set_meta "$dir" name "$name"
+  space_set_meta "$dir" provider "$provider"
+  space_set_meta "$dir" remote "$remote"
+  space_set_meta "$dir" folder "$folder"
+  space_set_meta "$dir" created "$(space_now)"
+  space_set_meta "$dir" initialized 0
+
+  rclone mkdir "$remote:$folder" 2>/dev/null || true
+  space_sync "$name" || return 1
+
+  echo ""
+  success "Space '$name' is ready: $dir"
+  log "Put files in docs/, notes in knowledge/, and skill folders in skills/."
+  if [ "$backend" = alias ]; then
+    log "Invite people: anyone who can open that folder runs  tekt space add $name folder <its path>"
+  else
+    log "Invite people: in $(space_label "$backend"), share the folder '$folder' like any other folder."
+    log "They run:  tekt space add $name $provider \"$folder\""
+    if [ "$backend" = drive ]; then log "  (Folder shared with them? They add a shortcut to it in My Drive first.)"; fi
+  fi
+  log "Keep it in sync automatically:  tekt space autosync on"
+}
+
+space_sync() {
+  local only="${1:-}" dir name remote folder rc=0 any=0
+  if ! command_exists rclone; then error "rclone isn't installed. Run the Tekt installer first."; return 1; fi
+  space_flags
+  for dir in "$TEKT_SPACES"/*/; do
+    dir="${dir%/}"
+    [ -f "$dir/.tekt-space" ] || continue
+    name="$(space_meta "$dir" name)"; name="${name:-$(basename "$dir")}"
+    if [ -n "$only" ] && [ "$only" != "$name" ]; then continue; fi
+    any=1
+    remote="$(space_meta "$dir" remote)"; folder="$(space_meta "$dir" folder)"
+    local extra=()
+    if [ "$(space_meta "$dir" initialized)" != 1 ]; then extra=(--resync); fi   # first sync merges both sides
+    log "Syncing $name ↔ $remote:$folder"
+    if rclone bisync "$remote:$folder" "$dir" ${extra[@]+"${extra[@]}"} "${SPACE_FLAGS[@]}" -q; then
+      space_set_meta "$dir" initialized 1
+      space_set_meta "$dir" last_sync "$(space_now)"
+      success "$name is up to date"
+    else
+      rc=1
+      warn "$name didn't sync. If it keeps failing, reset it with:  rclone bisync $remote:$folder $dir --resync"
+    fi
+  done
+  if [ "$any" -eq 0 ]; then
+    if [ -n "$only" ]; then error "No Space named '$only'. See:  tekt space list"; return 1; fi
+    log "No Spaces yet. Add one:  tekt space add team drive"
+  fi
+  return "$rc"
+}
+
+space_list() {
+  section "Spaces"
+  local dir found=0 provider backend last docs skills
+  for dir in "$TEKT_SPACES"/*/; do
+    dir="${dir%/}"
+    [ -f "$dir/.tekt-space" ] || continue
+    found=1
+    provider="$(space_meta "$dir" provider)"
+    backend="$(space_backend "$provider" 2>/dev/null || printf '%s' "$provider")"
+    last="$(space_meta "$dir" last_sync)"
+    docs="$(find "$dir/docs" -type f 2>/dev/null | wc -l | tr -d ' ')"
+    skills="$(find "$dir/skills" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')"
+    printf "  ${GREEN}●${RESET} %-14s %-20s %s\n" "$(basename "$dir")" "$(space_label "$backend")" "$dir"
+    printf "    %-14s last sync %s · %s docs · %s skills\n" "" "${last:-never}" "$docs" "$skills"
+  done
+  if [ "$found" -eq 0 ]; then log "No Spaces yet. Add one:  tekt space add team drive"; fi
+}
+
+space_remove() {
+  local name="${1:-}" dir remote
+  if [ -z "$name" ]; then error "Which Space?  tekt space remove <name>"; return 1; fi
+  dir="$TEKT_SPACES/$name"
+  if [ ! -f "$dir/.tekt-space" ]; then error "No Space named '$name'. See:  tekt space list"; return 1; fi
+  remote="$(space_meta "$dir" remote)"
+  rclone config delete "$remote" 2>/dev/null || true
+  mv "$dir/.tekt-space" "$dir/.tekt-space.removed"
+  success "Disconnected '$name'. Your files stay in $dir and in the cloud folder; nothing was deleted."
+}
+
+space_autosync() {
+  local mode="${1:-on}" current line
+  if ! command_exists crontab; then error "Background sync needs cron. Sync by hand instead:  tekt space sync"; return 1; fi
+  current="$(crontab -l 2>/dev/null | grep -v '# tekt-autosync' || true)"
+  if [ "$mode" = off ]; then
+    printf '%s\n' "$current" | crontab -
+    success "Autosync off. Sync by hand any time:  tekt space sync"
+    return
+  fi
+  install_tekt_cli >/dev/null || true
+  line="*/10 * * * * TEKT_HOME=\"$TEKT_HOME\" PATH=\"${PATH//%/\\%}\" \"$TEKT_BIN\" space sync >/dev/null 2>&1 # tekt-autosync"
+  { if [ -n "$current" ]; then printf '%s\n' "$current"; fi; printf '%s\n' "$line"; } | crontab -
+  success "Autosync on: your Spaces sync every 10 minutes. Turn it off with:  tekt space autosync off"
+}
+
+# The tekt command: a copy of this script on your PATH (tekt space …, tekt status)
+install_tekt_cli() {
+  ensure_local_bin
+  mkdir -p "$(dirname "$TEKT_BIN")"
+  local src="${BASH_SOURCE[0]:-}"
+  if [ -n "$src" ] && [ -f "$src" ]; then
+    [ "$src" -ef "$TEKT_BIN" ] || cp "$src" "$TEKT_BIN"
+  else
+    curl -fsSL https://tekt.md/install.sh -o "$TEKT_BIN" || { warn "Couldn't download the tekt command — try again later."; return 1; }
+  fi
+  chmod +x "$TEKT_BIN"
+  success "tekt command ready: $TEKT_BIN  (try: tekt help)"
+}
+
+tekt_help() {
+  local me; me="$(basename "$0")"
+  [ "$me" = "tekt" ] || me="bash install.sh"
+  cat <<EOF
+Usage: $me [command]
+
+Share with your AI and your people
+  space add <name> [storage] [folder]  Make a Space: a folder synced with Google Drive,
+                                       OneDrive, Dropbox, Box, Nextcloud or a NAS folder
+                                       (storage: drive, onedrive, dropbox, box, nextcloud, folder, s3)
+  space list                           Show your Spaces
+  space sync [name]                    Sync now (every Space, or one)
+  space remove <name>                  Disconnect a Space (keeps every file)
+  space autosync on|off                Sync every 10 minutes in the background
+
+Set up and check
+  install        Install all Tekt tools (what the one-line installer runs)
+  status         Check which tools are installed
+  catalog        Print the tool catalog (tekt.catalog.yaml)
+  mcp            Bring up MCPHub + the curated MCP servers (:3000)
+  ui             Bring up LibreChat (:3080) and n8n (:5678)
+  share [port]   HTTPS-expose a local port (Tailscale Serve, else ngrok)
+  cli            Install the tekt command into ~/.local/bin
+  help           Show this help
+
+Guide: https://tekt.md/spaces/
+EOF
+}
+
+# =============================================================================
 # Summary
 # =============================================================================
 print_summary() {
@@ -1402,6 +1710,7 @@ print_summary() {
   log "  bash install.sh ui      # LibreChat :3080 and n8n :5678"
   log "  Sovrant Web :5100       # cd \$TEKT_INSTANCE/sovrant && dotnet run --project src/Sovrant.Web"
   log "Restart your terminal/session to reload PATH (required after some installs)."
+  log "Share a folder with your AI and your people:  tekt space add team drive   (guide: https://tekt.md/spaces/)"
   log "OpenClaw onboarding is intentionally deferred: run 'openclaw onboard --install-daemon' when ready."
   log "Docs: https://tekt.md"
   echo ""
@@ -1531,6 +1840,18 @@ tekt_status() {
     printf "  ${YELLOW}?${RESET}  %-18s %s\n" "Sovrant" "not staged (BSL 1.1) — bash install.sh installs it"
   fi
 
+  echo ""
+  echo -e "${BOLD}Spaces — shared with your AI and your people${RESET}"
+  local sdir sfound=0 slast
+  for sdir in "$TEKT_SPACES"/*/; do
+    sdir="${sdir%/}"
+    [ -f "$sdir/.tekt-space" ] || continue
+    sfound=1
+    slast="$(space_meta "$sdir" last_sync)"
+    printf "  ${GREEN}✓${RESET}  %-18s %s\n" "$(basename "$sdir")" "last sync ${slast:-never} — $sdir"
+  done
+  if [ "$sfound" -eq 0 ]; then printf "  ${YELLOW}?${RESET}  %-18s %s\n" "No Spaces yet" "tekt space add team drive"; fi
+
   # ── Totals ──
   local total=$((installed + missing))
   echo ""
@@ -1592,6 +1913,7 @@ main() {
   # ── Tekt.Base ──
   install_rclone        || warn "rclone install failed — continuing..."
   install_s3_tools      || warn "S3 tools install failed — continuing..."
+  install_tekt_cli      || warn "tekt command install failed — continuing..."
 
   # ── Tekt.Edge ──
   install_tailscale     || warn "Tailscale install failed — continuing..."
@@ -1645,24 +1967,29 @@ case "${1:-}" in
   share)
     tekt_share "${2:-3000}"
     ;;
+  space)
+    shift
+    case "${1:-list}" in
+      add)       shift; space_add "$@" ;;
+      list|ls)   space_list ;;
+      sync)      space_sync "${2:-}" ;;
+      remove|rm) space_remove "${2:-}" ;;
+      autosync)  space_autosync "${2:-on}" ;;
+      *) error "Unknown: space ${1} — use add, list, sync, remove or autosync"; exit 1 ;;
+    esac
+    ;;
+  cli)
+    install_tekt_cli
+    ;;
+  install)
+    main
+    ;;
   help|--help|-h)
-    echo "Usage: $(basename "$0") [command]"
-    echo ""
-    echo "Commands:"
-    echo "  (none)        Install all Tekt tools"
-    echo "  status        Check which tools are installed"
-    echo "  catalog       Print the tool catalog (tekt.catalog.yaml)"
-    echo "  mcp           Bring up MCPHub + the curated MCP servers (:3000)"
-    echo "  ui            Bring up LibreChat (:3080) and n8n (:5678)"
-    echo "  share [port]  HTTPS-expose a local port (Tailscale Serve, else ngrok)"
-    echo "  help          Show this help"
-    echo ""
-    echo "When this becomes the tekt CLI, the same commands read as:"
-    echo "  tekt status · tekt catalog · tekt mcp · tekt ui · tekt share"
-    echo ""
+    tekt_help
     ;;
   "")
-    main
+    # `tekt` on its own shows help; running the installer file installs everything.
+    if [ "$(basename "$0")" = "tekt" ]; then tekt_help; else main; fi
     ;;
   *)
     error "Unknown command: $1"

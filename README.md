@@ -58,6 +58,17 @@ Tekt ships no model and no keys. Point your agents at whichever provider you cho
 
 Wire any of them into LibreChat, n8n, or an agent runtime's config. Tekt only connects them.
 
+## Share with your people
+
+Git is too technical, and S3 is too much work. Your people already use Google Drive, OneDrive, Dropbox, Box, Nextcloud or a shared folder, so a Tekt **Space** uses that. It's a folder on your computer that stays in sync with the storage you pick, laid out the same way for everyone: `docs/` for documents, `knowledge/` for notes worth keeping, and `skills/` for AI skills.
+
+```
+tekt space add team drive     # sign in to Google Drive in your browser, and that's it
+tekt space autosync on        # sync every 10 minutes in the background
+```
+
+Share the `Tekt/team` folder from Google Drive the way you share anything. Your colleague runs `tekt space add team drive "Tekt/team"`, and from then on you both, and both your AIs, work from the same files. Full guide: [tekt.md/spaces](/spaces/).
+
 ## Roadmap
 
 Where the belt is headed: a modular framework of providers, knowledge, agents, communication and cloud. You plug in the models, then orchestrate, build and empower your own workflows. The iteration-by-iteration plan is in [`.manage/2026.09.10.iterations.plan.md`](https://github.com/xingh/tekt.md/blob/main/.manage/2026.09.10.iterations.plan.md).
@@ -109,6 +120,8 @@ bash install.sh
 ## After the install
 
 ```
+tekt space add team drive    # share a folder with your AI and your people (Drive, OneDrive, Dropbox…)
+tekt space autosync on       # keep your Spaces in sync every 10 minutes
 bash install.sh status       # what landed, layer by layer
 bash install.sh mcp          # MCPHub + 4 curated MCP servers → :3000
 bash install.sh ui           # LibreChat → :3080, n8n → :5678
@@ -116,7 +129,7 @@ bash install.sh share 3080   # HTTPS-share a UI (Tailscale Serve, else ngrok)
 bash install.sh catalog      # print the tool catalog
 ```
 
-These subcommands are named so they read naturally when this script becomes the `tekt` CLI: `tekt status`, `tekt mcp`, `tekt ui`, `tekt share`.
+The installer also puts a `tekt` command on your PATH, so the same subcommands read `tekt status`, `tekt space add`, `tekt mcp`, `tekt ui`, `tekt share`. Type `tekt help` to see them all.
 
 ---
 

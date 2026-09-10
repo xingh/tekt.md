@@ -145,6 +145,23 @@ Tekt formalizes two storage archetypes so architecture decisions stay consistent
 
 Rule of thumb: keep fast conversational/working state in Memory Engine schemas; promote validated, reusable knowledge artifacts to Knowledge Engine schemas.
 
+## 8. Spaces: share with the storage people already use
+
+Most people will never touch git or an S3 bucket, but they all have Google Drive, OneDrive, Dropbox, Box, Nextcloud or a NAS. **Spaces** put rclone's sync engine behind one command, so a group can share documents, knowledge and skills through what they already have:
+
+```bash
+tekt space add team drive        # or onedrive, dropbox, box, nextcloud, folder, s3
+tekt space autosync on           # rclone bisync every 10 minutes (cron / Scheduled Task)
+tekt space list                  # what's shared, and when it last synced
+```
+
+- **On disk:** `~/Tekt/Spaces/<name>/{docs,knowledge,skills}` plus a local-only `.tekt-space` settings file. The same format is used by `install.sh` and `install.ps1`.
+- **Connection:** each Space gets its own rclone remote named `tekt-<name>`. Sign-in is OAuth in the browser (Drive, OneDrive, Dropbox, Box) or an app password (Nextcloud). Tokens stay in rclone's config on your machine.
+- **Sync:** `rclone bisync`. The first run merges both sides with `--resync`. After that, on rclone ≥ 1.66, the newest change wins and the other copy is kept.
+- **Knowledge Engine tie-in:** `knowledge/` is the human-curated layer that feeds the Knowledge Engine (§7). `docs/` is raw material, and `skills/` is picked up by agents (v0.4).
+
+The plain-language guide is at [tekt.md/spaces](/spaces/).
+
 ---
 
 ## Verify the layer
