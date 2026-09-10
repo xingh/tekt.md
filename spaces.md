@@ -89,7 +89,7 @@ One command lets the AI apps on your computer read and write your Spaces:
 
 ```bash
 tekt connect                   # every supported app it finds
-tekt connect claude-desktop    # or just one: claude-code, claude-desktop, codex
+tekt connect claude-desktop    # or just one: claude-code, claude-desktop, codex, opencode, crush
 ```
 
 | App | What Tekt does |
@@ -97,6 +97,8 @@ tekt connect claude-desktop    # or just one: claude-code, claude-desktop, codex
 | **Claude Code** | Registers the MCP server `tekt-spaces` for your user account |
 | **Claude Desktop** | Adds `tekt-spaces` to `claude_desktop_config.json` and saves a `.bak-tekt` copy of the original first. Restart the app afterwards. |
 | **Codex** | Adds `[mcp_servers.tekt-spaces]` to `~/.codex/config.toml`, with a `.bak-tekt` copy first |
+| **opencode** | Adds `tekt-spaces` under `"mcp"` in `~/.config/opencode/opencode.json`, with a `.bak-tekt` copy first. If the file has comments, Tekt leaves it alone and prints the lines to paste. |
+| **crush** | Adds one marked `mcp add tekt-spaces …` block to `~/.config/crush/crushrc`, and replaces it in place on later runs |
 | **Anything else that speaks MCP** | Run `npx -y @modelcontextprotocol/server-filesystem ~/Tekt/Spaces`, or use MCPHub (`tekt mcp`) at `http://localhost:3000/mcp`, which serves `/spaces` too |
 
 Running it again changes nothing, and Tekt only touches its own `tekt-spaces` entry. Then ask your AI: *"What's in my team Space?"* or *"Summarize the new files in team/docs."*

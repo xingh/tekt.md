@@ -221,6 +221,29 @@ layers:
         upstream: "qwibitai (MIT) — runs on the Claude Agent SDK"
         repo: https://github.com/qwibitai/nanoclaw
         note: "Setup is Claude-Code-guided: git clone, then run `claude` and /setup"
+      - name: Codex CLI
+        cmd: codex
+        upstream: "OpenAI (Apache-2.0)"
+        repo: https://github.com/openai/codex
+        install: "npm install -g @openai/codex"
+        install_macos: "brew install --cask codex"
+        install_windows: "irm https://chatgpt.com/codex/install.ps1 | iex"
+        note: "Sign in with: codex login. tekt connect gives it your Spaces."
+      - name: opencode
+        cmd: opencode
+        upstream: "anomalyco & contributors (MIT)"
+        repo: https://github.com/anomalyco/opencode
+        install: "npm i -g opencode-ai@latest"
+        install_macos: "brew install anomalyco/tap/opencode"
+        note: "Open-source terminal coding agent for any provider. tekt connect gives it your Spaces."
+      - name: crush
+        cmd: crush
+        upstream: "Charm (FSL-1.1-MIT)"
+        repo: https://github.com/charmbracelet/crush
+        install: "npm install -g @charmland/crush"
+        install_macos: "brew install charmbracelet/tap/crush"
+        install_windows: "winget install charmbracelet.crush"
+        note: "Charm's terminal AI assistant. tekt connect adds your Spaces to its crushrc."
 
   tekt.cloud:
     title: "Chat, Workflows & Command Center"

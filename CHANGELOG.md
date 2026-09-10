@@ -8,6 +8,22 @@ permalink: /changelog/index.html
 
 # Changelog
 
+## v0.8.0 — More AI apps
+
+Bring your own intelligence, in the app you like (#64).
+
+- **Installed for you:**
+  - the **Codex CLI** (OpenAI; closes #29)
+  - **opencode**, an open-source agent for any provider (closes #36)
+  - **crush**, Charm's terminal assistant (closes #37)
+
+  They're installed on macOS, Linux and Windows, and each appears in `tekt status` and the catalog.
+- **`tekt connect` reaches them too.**
+  - **opencode:** `tekt-spaces` goes under `"mcp"` in `opencode.json`. A file with comments is left untouched, and you get the lines to paste.
+  - **crush:** one marked `mcp add` block goes in your `crushrc`, replaced in place on later runs.
+  - Checked with a real crush: the server starts with exactly the right arguments, even for paths with spaces.
+- **`tekt status`** shows opencode and crush under "AI apps connected to your Spaces".
+
 ## v0.7.0 — See your Spaces
 
 For people who never open a terminal (#31).
