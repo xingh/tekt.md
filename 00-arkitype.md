@@ -25,7 +25,7 @@ arkitype:
   name: tekt.edge.default
   archetype: workspace          # workspace | agent | edge | cloud
   layers:
-    tekt.dev:   full            # git, brew, go, python, node, vscode, docker
+    tekt.dev:   full            # git, gh, brew, go, python, node, vscode, docker
     tekt.base:  full            # rclone, aws-cli, s3cmd, s5cmd
     tekt.edge:  full            # tailscale, ngrok
     tekt.iris:  full            # ollama, claude-code, claude-desktop, zed,

@@ -3,7 +3,7 @@
 # Tekt Platform - Windows Bootstrap (PowerShell)
 # https://tekt.md
 #
-# Installs (winget): Git, Go, Python, Node LTS, VS Code, Docker Desktop,
+# Installs (winget): Git, GitHub CLI, Go, Python, Node LTS, VS Code, Docker Desktop,
 #                    rclone, AWS CLI, Tailscale, ngrok, Ollama
 # Installs (native): Claude Code, Claude Desktop, Zed Agent, OpenClaw, PicoClaw, ZeroClaw, Nanobot
 # Stages:            NanoClaw (WSL2/Docker), MCPHub, LibreChat, n8n
@@ -87,6 +87,7 @@ $TektCliPs1    = Join-Path $TektBin "tekt.ps1"
 $TektMcpName   = "tekt-spaces"
 $TektMcpPkg    = "@modelcontextprotocol/server-filesystem"
 $TektClaudeSkills = if ($env:TEKT_CLAUDE_SKILLS) { $env:TEKT_CLAUDE_SKILLS } else { Join-Path (Join-Path $HOME ".claude") "skills" }
+$TektResults   = [System.Collections.Generic.List[object]]::new()   # winget install results for the final summary
 $EmDash        = [string][char]0x2014   # built from char codes so the file parses the same under any encoding
 $MidDot        = [string][char]0x00B7
 
@@ -107,19 +108,88 @@ function Test-ClaudeDesktop {
     (Test-Path (Join-Path ${env:ProgramFiles} "Claude\Claude.exe"))
 }
 
+# -- winget: preflight and honest results -------------------------------------
+# A native command's non-zero exit never throws, so every winget result is judged
+# by $LASTEXITCODE (and by the command actually being on PATH), never by try/catch.
+$WingetOkCodes = @(0, -1978335135, -1978335189)   # 0x8A150061 already installed, 0x8A15002B no applicable upgrade
+
+function Format-ExitCode($code) { "0x" + ('{0:X8}' -f [int]$code) }
+
+function Add-InstallResult($label, $ok, [switch]$Pending) {
+    $TektResults.Add([pscustomobject]@{ Label = [string]$label; Ok = [bool]$ok; Pending = [bool]$Pending })
+}
+
+# Elevated session? [Security.Principal.WindowsPrincipal] throws off Windows, so that's "no".
+function Test-IsAdmin {
+    try {
+        $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+        return [bool]([Security.Principal.WindowsPrincipal]::new($identity)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    } catch { return $false }
+}
+
+# Run once before any installs: a broken source (0x8a15000f "Data required by the
+# source is missing") makes every winget install fail.
+function Test-WingetSources {
+    if (-not (Test-Cmd "winget")) { return }   # Install-Winget explains how to get winget
+    Section "winget sources"
+    $out  = (& winget source update 2>&1 | Out-String)
+    $code = $LASTEXITCODE
+    if ($code -eq 0 -and $out -notmatch '0x8a15000f') { Success "winget sources are up to date"; return }
+    Warn "winget's package sources are broken (exit code $(Format-ExitCode $code)), so installs would fail."
+    if ($out.Trim()) { Write-Host $out.Trim() }
+    if (Test-IsAdmin) {
+        Log "Resetting winget sources (this window is running as Administrator)..."
+        & winget source reset --force 2>&1 | Out-Host
+        $out  = (& winget source update 2>&1 | Out-String)
+        $code = $LASTEXITCODE
+        if ($code -eq 0 -and $out -notmatch '0x8a15000f') { Success "winget sources repaired"; return }
+        Warn "winget sources still look broken (exit code $(Format-ExitCode $code)) - installs below may fail."
+    } else {
+        Warn "Open PowerShell as Administrator and run: winget source reset --force; winget source update"
+        Warn "Then run the installer again. Continuing for now - winget installs below may fail."
+    }
+}
+
 function Install-Winget($label, $id, $cmd) {
     Section $label
-    if ($cmd -and (Test-Cmd $cmd)) { Success "$label already installed"; return }
+    if ($cmd -and (Test-Cmd $cmd)) { Success "$label already installed"; Add-InstallResult $label $true; return }
     if (-not (Test-Cmd "winget")) {
         Warn "winget not found - install 'App Installer' from the Microsoft Store, then re-run."
+        Add-InstallResult $label $false
         return
     }
-    try {
-        winget install --id $id -e --accept-source-agreements --accept-package-agreements
-        Refresh-SessionPath
-        Success "$label installed ($id)"
-    } catch {
-        Warn "$label install failed. Try:  winget search $label   - or install manually."
+    winget install --id $id -e --source winget --accept-source-agreements --accept-package-agreements
+    $code = $LASTEXITCODE
+    Refresh-SessionPath
+    if ($WingetOkCodes -notcontains $code) {
+        Warn "$label didn't install (winget exit code $(Format-ExitCode $code)). Try: winget install --id $id -e"
+        Add-InstallResult $label $false
+        return
+    }
+    if ($cmd -and -not (Test-Cmd $cmd)) {
+        # winget succeeded; Windows often only exposes the new command in a fresh window
+        Warn "$label installed, but '$cmd' isn't available in this window yet. Open a new PowerShell window, then run .\install.ps1 status"
+        Add-InstallResult $label $true -Pending
+        return
+    }
+    Success "$label installed ($id)"
+    Add-InstallResult $label $true
+}
+
+function Write-InstallSummary {
+    $ok  = @($TektResults | Where-Object { $_.Ok })
+    $bad = @($TektResults | Where-Object { -not $_.Ok })
+    $wait = @($TektResults | Where-Object { $_.Pending })
+    Section "Summary"
+    $line = "{0} installed, {1} failed" -f $ok.Count, $bad.Count
+    if ($bad.Count -eq 0) {
+        Success $line
+    } else {
+        Warn "$line - failed: $(($bad | ForEach-Object { $_.Label }) -join ', ')"
+        Log "Fix the warnings above, then run .\install.ps1 again (tools already installed are skipped)."
+    }
+    if ($wait.Count -gt 0) {
+        Log "Open a new PowerShell window to start using: $(($wait | ForEach-Object { $_.Label }) -join ', ')"
     }
 }
 
@@ -1134,6 +1204,7 @@ function Tekt-Status {
     Write-Host "`nTekt Environment Status - https://tekt.md`n" -ForegroundColor Cyan
     $rows = @(
         @("Tekt.Dev",  "Git",         "git"),
+        @("Tekt.Dev",  "GitHub CLI",  "gh"),
         @("Tekt.Dev",  "Go",          "go"),
         @("Tekt.Dev",  "Python",      "python"),
         @("Tekt.Dev",  "Node.js",     "node"),
@@ -1224,9 +1295,12 @@ function Main {
     Write-Host "Pre-vetted tools for an AI sandbox. Bring your own intelligence: Ollama, OpenRouter, OpenAI, Anthropic.`n"
     Refresh-SessionPath
     Log "Tip: WSL2 gives full Linux parity - wsl --install, then bash install.sh"
+    $TektResults.Clear()
+    Test-WingetSources
 
     # Tekt.Dev
     Install-Winget "Git"            "Git.Git"                    "git"
+    Install-Winget "GitHub CLI"     "GitHub.cli"                 "gh"
     Install-Winget "Go"             "GoLang.Go"                  "go"
     Install-Winget "Python 3.12"    "Python.Python.3.12"         "python"
     Install-Winget "Node.js LTS"    "OpenJS.NodeJS.LTS"          "node"
@@ -1259,7 +1333,11 @@ function Main {
     Log "Staged (tekt.cloud): bring up with  .\install.ps1 mcp   and   .\install.ps1 ui"
     Log "Let your AI apps use your Spaces:  tekt connect"
     Log "PATH is refreshed during install. If a new command still isn't found, open a new PowerShell window, then run:  .\install.ps1 status"
+    Write-InstallSummary
 }
+
+# Dot-sourced (. .\install.ps1)? Define the functions only - handy for tests - and skip the dispatch.
+if ($MyInvocation.InvocationName -eq '.') { return }
 
 switch ($Command) {
     "status" { Tekt-Status }
