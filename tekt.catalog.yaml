@@ -1,19 +1,24 @@
 # =============================================================================
 # tekt.catalog.yaml
-# Tekt Platform — Tool Catalog & Version Pins
-# https://tekt.md
+# Tekt — the catalog: tools, agents, MCP servers, skills
+# https://tekt.md/catalog/
 #
-# This file is the single source of truth for what the Tekt bootstrap installs.
-# Edit the `pins:` block to change versions — install.sh and install.ps1 read
-# these pins at startup (if this file sits next to the script).
+# This file is the single source of truth for what Tekt installs and
+# recommends. The installers read the `pins:` block at startup (if this file
+# sits next to the script). The tekt.md site renders every shelf from it.
 #
-# Every tool below credits its upstream creators. Tekt is a distribution:
+# Shelves: tools and agents (under `layers:`, kind set per entry or by the
+# layer's `default_kind`), `mcp_servers:`, and hand-curated `skills:`.
+#
+# Every entry credits its upstream creators. Tekt is a curated catalog:
 # the work belongs to the people and teams listed under `upstream`.
 # =============================================================================
 
 catalog_version: "2026.07"
 distribution: tekt.md
-positioning: "The Linux of AI Orchestration at the edge — AI Sovereignty, Security, Privacy"
+positioning: "The open-source utility belt for your AI harness: pre-vetted tools, agents, MCP servers and skills that set up an AI sandbox on Linux or Windows. Bring your own intelligence."
+pillars: [Sovereignty, Security, Privacy]
+audiences: [builders, operators, managers]
 
 # ── Version pins (read by install.sh / install.ps1) ──────────────────────────
 pins:
@@ -134,8 +139,10 @@ layers:
   tekt.iris:
     title: "Intelligence — Agents & Models"
     doc: 03-software.md
+    default_kind: agent        # entries here sit on the Agents shelf unless they say otherwise
     tools:
       - name: Ollama
+        kind: tool             # model runtime, not an agent
         cmd: ollama
         upstream: "Ollama — ollama.com (MIT)"
         docs: https://ollama.com
@@ -240,16 +247,97 @@ mcp_servers:
   filesystem:
     package: "@modelcontextprotocol/server-filesystem"
     upstream: "Anthropic / MCP reference servers"
+    repo: https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem
     scope: /workspace
+    summary: "Read and write files in your Tekt workspace"
+    status: default
   fetch:
     package: "mcp-server-fetch"
     runner: uvx
     upstream: "Anthropic / MCP reference servers"
+    repo: https://github.com/modelcontextprotocol/servers/tree/main/src/fetch
+    summary: "Fetch a web page and hand it to the agent as markdown"
+    status: default
   memory:
     package: "@modelcontextprotocol/server-memory"
     upstream: "Anthropic / MCP reference servers"
+    repo: https://github.com/modelcontextprotocol/servers/tree/main/src/memory
+    summary: "A local knowledge-graph memory agents can write to and recall"
+    status: default
   github:
     package: "@modelcontextprotocol/server-github"
     upstream: "Anthropic / MCP reference servers"
+    repo: https://github.com/modelcontextprotocol/servers-archived/tree/main/src/github
+    summary: "Issues, pull requests and repos through the GitHub API"
+    status: default
     env:
       GITHUB_PERSONAL_ACCESS_TOKEN: "set-me"
+
+# ── Hand-curated skills ───────────────────────────────────────────────────────
+# Skills are packaged instructions an agent loads for one kind of job. Each is
+# picked by hand and tested before tekt installs it. `curating` = chosen and
+# installable by hand today; the bootstrap does not install it yet.
+skills:
+  rfp-proposal-responder:
+    upstream: "xingh/arkitype — arkitype Claude Code plugin"
+    repo: https://github.com/xingh/arkitype/tree/main/plugins/arkitype/skills/rfp-proposal-responder
+    runs_in: [claude-code]
+    install: "/plugin marketplace add xingh/arkitype, then /plugin install arkitype@arkitype"
+    summary: "Turns solicitation PDFs into a compliance checklist, a draft proposal, and a cost and timeline estimate"
+    status: curating
+  domain-to-diligence:
+    upstream: "xingh/arkitype — arkitype Claude Code plugin"
+    repo: https://github.com/xingh/arkitype/tree/main/plugins/arkitype/skills/domain-to-diligence
+    runs_in: [claude-code]
+    install: "/plugin marketplace add xingh/arkitype, then /plugin install arkitype@arkitype"
+    summary: "Turns a company's domain name into a scored, confidence-tagged investment memo"
+    status: curating
+  opportunity-finder:
+    upstream: "xingh/arkitype — arkitype Claude Code plugin"
+    repo: https://github.com/xingh/arkitype/tree/main/plugins/arkitype/skills/opportunity-finder
+    runs_in: [claude-code]
+    install: "/plugin marketplace add xingh/arkitype, then /plugin install arkitype@arkitype"
+    summary: "Finds, verifies and scores grants, fellowships and awards, then writes proposal briefs"
+    status: curating
+  arkitype-extract:
+    upstream: "xingh/arkitype — arkitype Claude Code plugin"
+    repo: https://github.com/xingh/arkitype/blob/main/plugins/arkitype/commands/extract.md
+    runs_in: [claude-code]
+    install: "/plugin marketplace add xingh/arkitype, then /plugin install arkitype@arkitype"
+    summary: "Reverse-engineers a codebase into the five-file arkitype spec (00–04)"
+    status: curating
+
+# ── Intelligence: bring your own ──────────────────────────────────────────────
+# Tekt ships no model and no keys. Point any agent at the provider you choose,
+# by API key or through the provider's own client. Tekt only wires it up.
+intelligence:
+  ollama:
+    name: Ollama
+    mode: local
+    connects: [api]
+    upstream: "Ollama (MIT)"
+    repo: https://ollama.com
+    summary: "Open-weight models on your own hardware, no key needed. Tekt installs it."
+  openrouter:
+    name: OpenRouter
+    mode: hosted
+    connects: [api]
+    upstream: "OpenRouter"
+    repo: https://openrouter.ai
+    summary: "One key for hundreds of hosted models behind an OpenAI-compatible endpoint."
+  openai:
+    name: OpenAI
+    mode: hosted
+    connects: [api, client]
+    clients: [Codex CLI]
+    upstream: "OpenAI"
+    repo: https://platform.openai.com
+    summary: "GPT models by API key, or through OpenAI's own Codex CLI."
+  anthropic:
+    name: Anthropic
+    mode: hosted
+    connects: [api, client]
+    clients: [Claude Code, Claude Desktop]
+    upstream: "Anthropic"
+    repo: https://docs.anthropic.com
+    summary: "Claude models by API key, or through Anthropic's own Claude Code and Claude Desktop."

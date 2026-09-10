@@ -1,0 +1,47 @@
+---
+layout: layout.njk
+title: Catalog
+eyebrow: tekt.catalog.yaml · pre-vetted · open source + SaaS
+lead: Every tool, agent, MCP server and skill Tekt installs or recommends, who made it, and the intelligence providers you can bring. This page is generated from tekt.catalog.yaml, the same file the installers read.
+permalink: /catalog/index.html
+---
+
+<div class="filters" role="toolbar" aria-label="Filter the catalog by shelf">
+  <button type="button" data-kind="all" aria-pressed="true">All<span>{{ catalog.entries.length }}</span></button>
+  {% for s in site.shelves %}<button type="button" data-kind="{{ s.kind }}" aria-pressed="false">{{ s.title }}<span>{{ catalog.byKind[s.kind].length }}</span></button>{% endfor %}
+</div>
+
+{% for s in site.shelves %}
+<section class="shelf-section" data-kind="{{ s.kind }}">
+  <h2 id="{{ s.kind }}">{{ s.title }}</h2>
+  <p>{{ s.blurb }} <span class="status status-{{ s.status }}">{{ s.status | replace("-", " ") }}</span></p>
+  <table>
+    <thead><tr><th>Name</th><th>Layer</th><th>What it does · made by</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for e in catalog.byKind[s.kind] %}
+      {% set L = site.layers | layerCode(e.code) %}
+      <tr>
+        <td>{% if e.link %}<a href="{{ e.link }}">{{ e.name | escape }}</a>{% else %}{{ e.name | escape }}{% endif %}</td>
+        <td><a class="chip tinted" href="{{ L.url }}" style="--c-l:{{ L.color }};--c-d:{{ L.color_dark }}">{{ L.code }} {{ e.layer }}</a></td>
+        <td>{% if e.note %}{{ e.note | escape }}<br />{% endif %}<span class="made">{{ e.upstream | escape }}{% if e.license %} · {{ e.license | escape }}{% endif %}</span></td>
+        <td><span class="status status-{{ e.status }}">{{ e.status | replace("-", " ") }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endfor %}
+
+<p>Want something on a shelf? Open an issue at <a href="{{ site.repo }}/issues">github.com/xingh/tekt.md</a>. Every entry needs a named upstream, a license, and a reason it earns its place.</p>
+
+<script>
+  (function () {
+    var buttons = document.querySelectorAll(".filters button");
+    var sections = document.querySelectorAll(".shelf-section");
+    var show = function (kind) {
+      buttons.forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.kind === kind)); });
+      sections.forEach(function (s) { s.hidden = kind !== "all" && s.dataset.kind !== kind; });
+    };
+    buttons.forEach(function (b) { b.addEventListener("click", function () { show(b.dataset.kind); }); });
+  })();
+</script>

@@ -1,14 +1,16 @@
 ---
 layout: layout.njk
-title: tekt.md — Tekt Bootstrap
+title: tekt.md — The Utility Belt for Your AI Harness
 permalink: /index.html
 ---
 
-# Tekt — Bootstrap Open Source AI
+# Tekt — The Utility Belt for Your AI Harness
 
 ![Tekt cover](./tekt.cover.png)
 
-**AI Sovereignty · Security · Privacy.** Tekt is an open distribution that bootstraps a complete AI engineering environment — dev tooling, workspace sync, local models, seven agent runtimes, an MCP server hub, and self-hosted chat & workflow UIs — on *your* hardware, with *your* keys, in a single script.
+**Easy AI at the edge.** Tekt sets up an **AI sandbox** on your Linux or Windows machine so agents can do real work for you. It is an open-source utility belt for AI engineers: a hand-curated catalog of **tools**, **agents**, **MCP servers** and **skills**. It brings the best of open source and SaaS, already picked and vetted, so you don't have to choose. One script installs it on infrastructure you own, and you **bring your own intelligence**. Builders get a workbench ready to go. Operators get a stack they can run and share. Managers get a clear view of what the agents are doing. *Sovereignty · Security · Privacy.*
+
+Browse every shelf at [tekt.md/catalog](/catalog/), or read the source of truth: [`tekt.catalog.yaml`](https://github.com/xingh/tekt.md/blob/main/tekt.catalog.yaml).
 
 ![Tekt architecture body](./tekt.body.png)
 
@@ -22,7 +24,39 @@ flowchart LR
 ```
 
 
-Tekt is a distribution, not a product: every component below is someone else's excellent work, credited explicitly. What Tekt adds is the composition — the [arkitype](/00-arkitype/) — and a bootstrap that gets an AI engineer from a blank machine to a working edge/cloud stack in one sitting.
+Tekt is a catalog, not a product: every entry is someone else's excellent work, credited explicitly. What Tekt adds is the curation (what earns a place on a shelf), the composition (the [arkitype](/00-arkitype/)), and a bootstrap that takes you from a blank machine to a working edge/cloud stack in one sitting.
+
+## Who it's for
+
+| | What you get | Start with |
+| --- | --- | --- |
+| **Builders** & AI engineers | A ready AI sandbox: toolchain, local models, agent runtimes and MCP tools installed in one pass, so the first hour goes to your idea | `bash install.sh`, then `claude` — see [03 — Software](/03-software/) |
+| **Operators** | A stack you can keep running: workspace sync, a private Tailscale network, one status check, HTTPS sharing in one command | `bash install.sh status` · `bash install.sh share 3080` — see [01](/01-infrastructure/) & [02](/02-database/) |
+| **Managers** | A clear view of the work: chat (LibreChat) and workflows (n8n) in any browser, plus a plain-language plan of what is installed and why | The shared chat URL from your operator · the plan in [00 — Arkitype](/00-arkitype/) · UIs in [04 — Interface](/04-interface/) |
+
+## Why it's different
+
+Tekt isn't an agent, a model, or a platform, and it doesn't want your prompts or your data. It's the utility belt around them. It helps you manage the four things every AI harness has, gets you started, and keeps different agents in sync through shared communications and knowledge tools. Every tool is pre-vetted and runs on your own infrastructure.
+
+| Your harness needs | What that means | Where it lives in Tekt |
+| --- | --- | --- |
+| **Metadata** | What's installed, where, which version, and who made it | `tekt.catalog.yaml`, `bash install.sh status` |
+| **Structure** | How machines, agents and tools fit together | The [arkitype](/00-arkitype/) layers 00 – 04 |
+| **Processes** | How agents hand work to each other and to people | MCPHub, n8n, LibreChat |
+| **State** | One workspace and memory every agent can read and write | rclone → S3 workspace sync, Tailscale mesh, memory MCP |
+
+## Bring your own intelligence
+
+Tekt ships no model and no keys. Point your agents at whichever provider you choose, by API or through the provider's own client:
+
+| Provider | How you connect | Notes |
+| --- | --- | --- |
+| **Ollama** | Local, no key | Open-weight models on your hardware; Tekt installs it |
+| **OpenRouter** | API key | Hundreds of hosted models behind one OpenAI-compatible endpoint |
+| **OpenAI** | API key, or the Codex CLI | GPT models |
+| **Anthropic** | API key, or Claude Code / Claude Desktop | Claude models |
+
+Wire any of them into LibreChat, n8n, or an agent runtime's config. Tekt only connects them.
 
 ---
 
