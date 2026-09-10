@@ -116,6 +116,21 @@ After each sync, Tekt links every skill in your Spaces into Claude Code as `~/.c
 
 Skills from people outside your group work the same way. Put them in a Space's `skills/` folder, for example the curated arkitype skills listed on the [catalog](/catalog/#skill).
 
+## See your Spaces in a window
+
+Not everyone wants a terminal. `tekt space gui` installs [RcloneView](https://rcloneview.com) and opens it: a point-and-click window for browsing your cloud storage and copying files between it and your computer.
+
+```bash
+tekt space gui
+```
+
+- **macOS:** installed with Homebrew (`brew install --cask rcloneview`).
+- **Windows:** Tekt downloads the official installer and runs it. You'll see the normal setup wizard.
+- **Linux:** a self-contained AppImage in `~/.local/bin`, with no sudo needed. It needs FUSE 2, and Tekt tells you how to add it if it's missing.
+- **Servers without a desktop** skip it; Spaces work the same from the terminal.
+
+RcloneView is **freemium** software from Bdrive Inc. The core features are free, and RcloneView Plus adds scheduling and filters. Tekt lists it in the [catalog](/catalog/) as optional.
+
 ## Everyday commands
 
 | Command | What it does |
@@ -126,6 +141,7 @@ Skills from people outside your group work the same way. Put them in a Space's `
 | `tekt space autosync on` / `off` | Sync every 10 minutes in the background |
 | `tekt space invite <name>` | Write an invitation to a Space and copy it to your clipboard |
 | `tekt space open <name>` | Open a Space's folder |
+| `tekt space gui` | Open your storage in a point-and-click window (RcloneView) |
 | `tekt space remove <name>` | Disconnect a Space. Every file stays where it is. |
 | `tekt connect [app]` | Let Claude Code, Claude Desktop and Codex use your Spaces |
 | `tekt skill new <space> <name>` | Start a shared skill from a template |

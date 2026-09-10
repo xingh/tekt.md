@@ -56,6 +56,7 @@ SOVRANT_REPO="https://github.com/ramseur/sovrant"        # BSL 1.1 — public; .
 # ── Container images (tekt.cloud) ─────────────────────────────────────────────
 MCPHUB_IMAGE="samanhappy/mcphub:latest"
 N8N_IMAGE="docker.n8n.io/n8nio/n8n:latest"
+RCLONEVIEW_LINUX_VERSION="1.5.12"   # RcloneView AppImage (tekt space gui)
 
 # ── Tekt instance layout ──────────────────────────────────────────────────────
 TEKT_HOME="${TEKT_HOME:-$HOME/Tekt}"
@@ -76,7 +77,7 @@ load_catalog_pins() {
   catalog="${TEKT_CATALOG:-$script_dir/tekt.catalog.yaml}"
   [ -f "$catalog" ] || return 0
   local key val
-  for key in GO_VERSION PYTHON_VERSION NODE_VERSION NVM_VERSION DOTNET_CHANNEL MCPHUB_IMAGE N8N_IMAGE; do
+  for key in GO_VERSION PYTHON_VERSION NODE_VERSION NVM_VERSION DOTNET_CHANNEL MCPHUB_IMAGE N8N_IMAGE RCLONEVIEW_LINUX_VERSION; do
     val="$(grep -E "^[[:space:]]{2}${key}:" "$catalog" 2>/dev/null | head -1 \
            | sed -E 's/^[^:]+:[[:space:]]*"?([^"#]*[^"# ])"?.*$/\1/')"
     [ -n "$val" ] && eval "${key}=\"\$val\""
@@ -1949,6 +1950,89 @@ EOF
   log "Edit it, then run  tekt space sync $space  — everyone in the Space gets it."
 }
 
+# =============================================================================
+# RcloneView — a point-and-click window onto your storage (tekt space gui)
+# Freemium and proprietary (Bdrive Inc.): core features free, Plus adds
+# scheduling and filters. Installed on desktops only.
+# =============================================================================
+RCLONEVIEW_APPIMAGE="$HOME/.local/bin/RcloneView.AppImage"
+
+has_desktop() {
+  [ "$(os_type)" = macos ] || [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]
+}
+
+rcloneview_installed() {
+  case "$(os_type)" in
+    macos) [ -d "/Applications/RcloneView.app" ] || [ -d "$HOME/Applications/RcloneView.app" ] ;;
+    *)     [ -x "$RCLONEVIEW_APPIMAGE" ] || command_exists rcloneview ;;
+  esac
+}
+
+install_rcloneview() {
+  section "RcloneView (point-and-click window onto your storage)"
+  if rcloneview_installed; then success "RcloneView already installed"; return 0; fi
+  if ! has_desktop; then
+    log "No desktop on this machine — skipping RcloneView. Spaces work fine from the terminal."
+    return 0
+  fi
+  case "$(os_type)" in
+    macos)
+      if command_exists brew; then
+        brew install --cask rcloneview --quiet || true
+      else
+        warn "Install Homebrew first, or download RcloneView from https://rcloneview.com"
+        return 1
+      fi
+      ;;
+    linux)
+      local arch url
+      case "$(arch_type)" in
+        amd64) arch=x86_64 ;;
+        arm64) arch=aarch64 ;;
+        *) warn "There's no RcloneView build for this CPU — see https://rcloneview.com"; return 1 ;;
+      esac
+      url="https://downloads.bdrive.com/rclone_view/linux/${RCLONEVIEW_LINUX_VERSION%.*}/RcloneView-${RCLONEVIEW_LINUX_VERSION}-${arch}.AppImage"
+      ensure_local_bin
+      log "Downloading RcloneView ${RCLONEVIEW_LINUX_VERSION} (AppImage, no sudo needed)..."
+      if ! { curl -fL --progress-bar "$url" -o "$RCLONEVIEW_APPIMAGE" && chmod +x "$RCLONEVIEW_APPIMAGE"; }; then
+        rm -f "$RCLONEVIEW_APPIMAGE"
+        warn "The download didn't work — get RcloneView from https://rcloneview.com"
+        return 1
+      fi
+      ;;
+    *)
+      warn "Get RcloneView from https://rcloneview.com"
+      return 1
+      ;;
+  esac
+  if rcloneview_installed; then
+    success "RcloneView installed. It's freemium: the core features are free; RcloneView Plus adds scheduling and filters."
+  else
+    warn "RcloneView didn't install — get it from https://rcloneview.com"
+    return 1
+  fi
+}
+
+tekt_gui() {
+  if ! has_desktop; then
+    error "RcloneView needs a desktop. On this machine, use  tekt space list  and  tekt space open <name>."
+    return 1
+  fi
+  install_rcloneview || return 1
+  case "$(os_type)" in
+    macos)
+      open -a RcloneView
+      ;;
+    *)
+      if ! ldconfig -p 2>/dev/null | grep "libfuse.so.2" >/dev/null; then
+        warn "RcloneView (an AppImage) needs FUSE 2. Ubuntu/Debian: sudo apt install libfuse2   Fedora: sudo dnf install fuse"
+      fi
+      nohup "$RCLONEVIEW_APPIMAGE" >/dev/null 2>&1 &
+      ;;
+  esac
+  success "RcloneView is opening — use it to browse and copy files between your computer and your cloud storage. Your Spaces live in $TEKT_SPACES."
+}
+
 # The tekt command: a copy of this script on your PATH (tekt space …, tekt status)
 install_tekt_cli() {
   ensure_local_bin
@@ -1977,6 +2061,7 @@ Share with your AI and your people
   space sync [name]                    Sync now (every Space, or one)
   space invite <name>                  Write an invitation to a Space (copied to your clipboard)
   space open <name>                    Open a Space's folder
+  space gui                            Open your storage in a point-and-click window (RcloneView)
   space remove <name>                  Disconnect a Space (keeps every file)
   space autosync on|off                Sync every 10 minutes in the background
   connect [app]                        Let your AI apps use your Spaces
@@ -2159,6 +2244,11 @@ tekt_status() {
   echo ""
   echo -e "${BOLD}Tekt.Base — Communications & Sync${RESET}"
   check_tool "rclone"          rclone    base
+  if rcloneview_installed; then
+    printf "  ${GREEN}✓${RESET}  %-18s %s\n" "RcloneView" "installed — point-and-click window onto your storage"
+  else
+    printf "  ${YELLOW}?${RESET}  %-18s %s\n" "RcloneView" "optional window onto your storage — tekt space gui"
+  fi
   check_tool "aws-cli"         aws       base
   check_tool "s3cmd"           s3cmd     base
   check_tool "s5cmd"           s5cmd     base
@@ -2307,6 +2397,7 @@ main() {
   install_rclone        || warn "rclone install failed — continuing..."
   install_s3_tools      || warn "S3 tools install failed — continuing..."
   install_tekt_cli      || warn "tekt command install failed — continuing..."
+  install_rcloneview    || warn "RcloneView install skipped — continuing..."
 
   # ── Tekt.Edge ──
   install_tailscale     || warn "Tailscale install failed — continuing..."
@@ -2369,12 +2460,16 @@ case "${1:-}" in
       remove|rm) space_remove "${2:-}" ;;
       invite)    space_invite "${2:-}" ;;
       open)      space_open "${2:-}" ;;
+      gui)       tekt_gui ;;
       autosync)  space_autosync "${2:-on}" ;;
       *) error "Unknown: space ${1} — use add, list, sync, invite, open, remove or autosync"; exit 1 ;;
     esac
     ;;
   cli)
     install_tekt_cli
+    ;;
+  gui)
+    tekt_gui
     ;;
   connect)
     tekt_connect "${2:-all}"

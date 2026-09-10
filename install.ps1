@@ -24,6 +24,7 @@
 #         tekt space sync [name]                      # two-way sync now
 #         tekt space invite <name>                    # write an invitation (copied to your clipboard)
 #         tekt space open <name>                      # open a Space's folder
+#         tekt space gui                              # open your storage in a point-and-click window (RcloneView)
 #         tekt space remove <name>                    # disconnect (files are kept)
 #         tekt space autosync on|off                  # sync every 10 minutes
 #
@@ -96,11 +97,13 @@ $MidDot        = [string][char]0x00B7
 # -- Catalog pins (tekt.catalog.yaml next to this script, if present) ----------
 $McpHubImage = "samanhappy/mcphub:latest"
 $N8nImage    = "docker.n8n.io/n8nio/n8n:latest"
+$RcloneViewWinVersion = "1.5.32"   # winget's Bdrive.RcloneView is stale, so Tekt pins the official installer
 $catalogPath = Join-Path $PSScriptRoot "tekt.catalog.yaml"
 if (Test-Path $catalogPath) {
     $cat = Get-Content $catalogPath -Raw
     if ($cat -match 'MCPHUB_IMAGE:\s*"([^"]+)"') { $McpHubImage = $Matches[1] }
     if ($cat -match 'N8N_IMAGE:\s*"([^"]+)"')    { $N8nImage    = $Matches[1] }
+    if ($cat -match 'RCLONEVIEW_WINDOWS_VERSION:\s*"([^"]+)"') { $RcloneViewWinVersion = $Matches[1] }
     Log "Loaded version pins from tekt.catalog.yaml"
 }
 
@@ -451,6 +454,96 @@ volumes:
     } else { Warn "Start later: cd $n8n ; docker compose up -d" }
     Log "n8n license: Sustainable Use License (fair-code, not OSI open source)."
     Log "Wire-up guide: https://tekt.md/04-interface/"
+}
+
+# -- RcloneView: a point-and-click window onto your storage and Spaces ---------
+# Freemium and proprietary (Bdrive Inc.): the core features are free; RcloneView
+# Plus adds scheduling and filters. winget's Bdrive.RcloneView is stuck at 0.2.x,
+# so Tekt downloads the pinned official installer instead.
+function Get-RcloneViewUninstallEntries {
+    # -ErrorAction Ignore + try: the HKCU:/HKLM: drives don't exist off Windows
+    foreach ($root in "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+                      "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+                      "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*") {
+        try {
+            Get-ItemProperty -Path $root -ErrorAction Ignore |
+                Where-Object { $_.PSObject.Properties["DisplayName"] -and ([string]$_.DisplayName -match 'RcloneView') }
+        } catch { }
+    }
+}
+
+function Find-RcloneViewExe {   # full path to RcloneView.exe, or $null
+    $candidates = @()
+    if ($env:LOCALAPPDATA)   { $candidates += Join-Path (Join-Path (Join-Path $env:LOCALAPPDATA "Programs") "RcloneView") "RcloneView.exe" }
+    if (${env:ProgramFiles}) { $candidates += Join-Path (Join-Path ${env:ProgramFiles} "RcloneView") "RcloneView.exe" }
+    foreach ($entry in @(Get-RcloneViewUninstallEntries)) {
+        if ($entry.PSObject.Properties["InstallLocation"] -and $entry.InstallLocation) {
+            $candidates += Join-Path ([string]$entry.InstallLocation) "RcloneView.exe"
+        }
+        if ($entry.PSObject.Properties["DisplayIcon"] -and $entry.DisplayIcon) {
+            $candidates += (([string]$entry.DisplayIcon) -replace ',\s*-?\d+$', '').Trim('"')
+        }
+    }
+    foreach ($c in $candidates) {
+        if ($c -and ($c -match '\.exe$') -and (Test-Path -LiteralPath $c)) { return $c }
+    }
+    return $null
+}
+
+function Test-RcloneViewInstalled {
+    [bool](Find-RcloneViewExe) -or (@(Get-RcloneViewUninstallEntries).Count -gt 0)
+}
+
+function Install-RcloneView {
+    Section "RcloneView"
+    if (Test-RcloneViewInstalled) { Success "RcloneView already installed"; Add-InstallResult "RcloneView" $true; return }
+    $ver   = $RcloneViewWinVersion
+    $url   = "https://downloads.bdrive.com/rclone_view/builds/setup_rclone_view-$ver.exe"
+    $tmp   = if ($env:TEMP) { $env:TEMP } else { [IO.Path]::GetTempPath() }
+    $setup = Join-Path $tmp "setup_rclone_view-$ver.exe"
+    Log "Downloading RcloneView $ver (about 100 MB)..."
+    try {
+        Invoke-WebRequest -Uri $url -OutFile $setup -UseBasicParsing -ErrorAction Stop
+    } catch {
+        Warn "Couldn't download RcloneView ($url). Get it from https://rcloneview.com"
+        Add-InstallResult "RcloneView" $false
+        return
+    }
+    Log "Starting the RcloneView installer - follow the steps in its window."
+    try {
+        $proc = Start-Process -FilePath $setup -Wait -PassThru -ErrorAction Stop
+    } catch {
+        Warn "Couldn't start the RcloneView installer ($setup). Run it yourself, or get RcloneView from https://rcloneview.com"
+        Add-InstallResult "RcloneView" $false
+        return
+    }
+    $code = if ($proc -and $proc.PSObject.Properties["ExitCode"]) { $proc.ExitCode } else { 0 }
+    if ($code -ne 0) {
+        Warn "RcloneView didn't install (installer exit code $code - was the setup cancelled?). Try again: tekt space gui"
+        Add-InstallResult "RcloneView" $false
+        return
+    }
+    if (-not (Test-RcloneViewInstalled)) {
+        Warn "The RcloneView installer finished, but Tekt can't find RcloneView yet. Look for it in the Start menu."
+        Add-InstallResult "RcloneView" $true -Pending
+        return
+    }
+    Success "RcloneView installed. It's freemium: the core features are free; RcloneView Plus adds scheduling and filters."
+    Add-InstallResult "RcloneView" $true
+}
+
+function Tekt-Gui {   # tekt gui / tekt space gui
+    if (-not (Test-RcloneViewInstalled)) {
+        Install-RcloneView
+        if (-not (Test-RcloneViewInstalled)) { return }   # Install-RcloneView already explained what went wrong
+    }
+    $exe = Find-RcloneViewExe
+    $started = $false
+    if ($exe) {
+        try { Start-Process -FilePath $exe -ErrorAction Stop | Out-Null; $started = $true } catch { }
+    }
+    if (-not $started) { Log "Open RcloneView from the Start menu." }
+    Success "RcloneView is opening - use it to browse and copy files between your computer and your cloud storage. Your Spaces live in $TektSpaces."
 }
 
 function Tekt-Share($port) {
@@ -958,6 +1051,7 @@ function Space-Help {
     Write-Host "  sync [name]                     Two-way sync now (all Spaces, or just one)"
     Write-Host "  invite <name>                   Write an invitation to a Space (copied to your clipboard)"
     Write-Host "  open <name>                     Open a Space's folder"
+    Write-Host "  gui                             Open your storage in a point-and-click window (RcloneView)"
     Write-Host "  remove <name>                   Disconnect a Space (your files are kept)"
     Write-Host "  autosync on|off                 Sync every 10 minutes in the background"
 }
@@ -1361,6 +1455,11 @@ function Tekt-Status {
     if ($skTotal -gt 0) {
         Write-Host ("  [OK]  {0,-16} {1} of {2} linked into Claude Code" -f "Shared skills", $skLinked, $skTotal) -ForegroundColor Green
     }
+    if (Test-RcloneViewInstalled) {   # optional: never counted as missing
+        Write-Host ("  [OK]  {0,-16} installed" -f "RcloneView") -ForegroundColor Green
+    } else {
+        Write-Host ("  [ ?]  {0,-16} optional window onto your Spaces - tekt space gui" -f "RcloneView") -ForegroundColor Yellow
+    }
     Write-Host "`n  AI apps connected to your Spaces" -ForegroundColor Cyan
     $capps     = 0
     $ccJson    = Join-Path $HOME ".claude.json"
@@ -1403,6 +1502,7 @@ function Main {
     Install-Winget "rclone"         "Rclone.Rclone"              "rclone"
     Install-Winget "AWS CLI"        "Amazon.AWSCLI"              "aws"
     Install-TektCli
+    Install-RcloneView
     # Tekt.Edge
     Install-Winget "Tailscale"      "tailscale.tailscale"        "tailscale"
     Install-Winget "ngrok"          "Ngrok.Ngrok"                "ngrok"
@@ -1437,6 +1537,7 @@ switch ($Command) {
     "ui"     { Setup-Ui }
     "share"  { Tekt-Share $Arg }
     "cli"    { Install-TektCli }
+    "gui"    { Tekt-Gui }
     "connect" {
         Refresh-SessionPath
         $app = if ($Rest.Count -ge 1 -and $Rest[0]) { $Rest[0] } else { "all" }
@@ -1460,12 +1561,13 @@ switch ($Command) {
             "autosync" { Space-Autosync $a1 }
             "invite"   { Space-Invite $a1 }
             "open"     { Space-Open $a1 }
+            "gui"      { Tekt-Gui }
             "help"     { Space-Help }
-            default    { Err "Unknown: space $sub - use add, list, sync, invite, open, remove or autosync"; Space-Help }
+            default    { Err "Unknown: space $sub - use add, list, sync, invite, open, gui, remove or autosync"; Space-Help }
         }
     }
     "help"   {
-        Write-Host "Usage: .\install.ps1 [status|catalog|mcp|ui|share <port>|space ...|skill ...|connect [app]|cli|help]"
+        Write-Host "Usage: .\install.ps1 [status|catalog|mcp|ui|share <port>|space ...|skill ...|connect [app]|gui|cli|help]"
         Write-Host "       (after 'cli' you can type 'tekt' instead of '.\install.ps1')"
         Write-Host "  (none)        Install all Tekt tools"
         Write-Host "  status        Check which tools are installed"
@@ -1473,6 +1575,7 @@ switch ($Command) {
         Write-Host "  ui            LibreChat (:3080) + n8n (:5678)"
         Write-Host "  share <port>  HTTPS tunnel (Tailscale Serve, else ngrok)"
         Write-Host "  cli           Install the 'tekt' command"
+        Write-Host "  gui           Same as: space gui"
         Write-Host ""
         Write-Host "Spaces: share docs, knowledge and skills through Google Drive, OneDrive, Dropbox, Box, Nextcloud or a folder"
         Write-Host "  space add <name> [provider] [folder]  Create or join a Space"
@@ -1480,6 +1583,7 @@ switch ($Command) {
         Write-Host "  space sync [name]                     Two-way sync now"
         Write-Host "  space invite <name>                   Write an invitation to a Space (copied to your clipboard)"
         Write-Host "  space open <name>                     Open a Space's folder"
+        Write-Host "  space gui                             Open your storage in a point-and-click window (RcloneView)"
         Write-Host "  space remove <name>                   Disconnect a Space (your files are kept)"
         Write-Host "  space autosync on|off                 Sync every 10 minutes in the background"
         Write-Host ""

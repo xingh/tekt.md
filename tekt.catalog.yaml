@@ -29,6 +29,8 @@ pins:
   DOTNET_CHANNEL: "10.0"      # .NET SDK channel — Sovrant builds on .NET 10 / C# 14
   MCPHUB_IMAGE: "samanhappy/mcphub:latest"
   N8N_IMAGE: "docker.n8n.io/n8nio/n8n:latest"
+  RCLONEVIEW_LINUX_VERSION: "1.5.12"     # AppImage (tekt space gui)
+  RCLONEVIEW_WINDOWS_VERSION: "1.5.32"   # setup exe — winget's Bdrive.RcloneView is stale
 
 # ── Archetype schema contracts ────────────────────────────────────────────────
 schema_archetypes:
@@ -100,6 +102,16 @@ layers:
         cmd: rclone
         upstream: "Nick Craig-Wood & contributors — rclone.org"
         docs: https://rclone.org
+      - name: RcloneView
+        cmd: tekt space gui
+        upstream: "Bdrive Inc. — rcloneview.com"
+        license: "Freemium, proprietary: core features free; RcloneView Plus adds scheduling and filters"
+        docs: https://rcloneview.com
+        install_macos: "brew install --cask rcloneview"
+        install_linux: "AppImage from downloads.bdrive.com (pinned RCLONEVIEW_LINUX_VERSION)"
+        install_windows: "setup exe from downloads.bdrive.com (pinned RCLONEVIEW_WINDOWS_VERSION)"
+        optional: true
+        note: "A point-and-click window onto your storage for people who never open a terminal. Installed on desktops only."
       - name: AWS CLI v2
         cmd: aws
         upstream: "Amazon Web Services"
