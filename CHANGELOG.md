@@ -17,6 +17,7 @@ Share documents, knowledge and skills with your AI and your people, through the 
 - **The `tekt` command.** The installer now puts `tekt` on your PATH. Typing `tekt` by itself shows help; `tekt install` installs everything.
 - **AI access.** New MCPHub setups expose `/spaces` to every connected client.
 - **`tekt status`** lists your Spaces and when each last synced.
+- **Windows.** `install.ps1` has the same `space` and `cli` commands, and it reads and writes the same Space format as `install.sh`. It's now plain ASCII, so Windows PowerShell 5.1 can no longer misread its em dashes as quote characters.
 - **Docs.** A plain-language [Spaces guide](/spaces/), a "Share with your people" section on the home page, and this changelog.
 
 ## v0.1.0 — Blueprint
