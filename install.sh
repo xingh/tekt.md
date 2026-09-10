@@ -1396,6 +1396,10 @@ space_flags() {
     *--conflict-resolve*)   # rclone ≥ 1.66: newest wins, the other copy is kept
       SPACE_FLAGS+=(--conflict-resolve newer --conflict-loser num --resilient --recover --max-lock 2m) ;;
   esac
+  SPACE_RESYNC=(--resync)
+  case "$help" in
+    *--resync-mode*) SPACE_RESYNC+=(--resync-mode newer) ;;   # first sync: the newer copy of a file wins
+  esac
 }
 
 space_readme() {
@@ -1493,7 +1497,11 @@ space_add() {
   fi
 
   mkdir -p "$dir/docs" "$dir/knowledge" "$dir/skills"
-  [ -f "$dir/README.md" ] || space_readme "$name" > "$dir/README.md"
+  # Joining an existing Space? Its README arrives with the first sync — writing our own
+  # copy first makes the two sides disagree and the first sync fail.
+  if [ ! -f "$dir/README.md" ] && ! rclone lsf "$remote:$folder" --files-only --max-depth 1 2>/dev/null | grep -x "README.md" >/dev/null; then
+    space_readme "$name" > "$dir/README.md"
+  fi
   : > "$dir/.tekt-space"
   space_set_meta "$dir" name "$name"
   space_set_meta "$dir" provider "$provider"
@@ -1531,7 +1539,7 @@ space_sync() {
     any=1
     remote="$(space_meta "$dir" remote)"; folder="$(space_meta "$dir" folder)"
     local extra=()
-    if [ "$(space_meta "$dir" initialized)" != 1 ]; then extra=(--resync); fi   # first sync merges both sides
+    if [ "$(space_meta "$dir" initialized)" != 1 ]; then extra=("${SPACE_RESYNC[@]}"); fi   # first sync merges both sides
     log "Syncing $name ↔ $remote:$folder"
     if rclone bisync "$remote:$folder" "$dir" ${extra[@]+"${extra[@]}"} "${SPACE_FLAGS[@]}" -q; then
       space_set_meta "$dir" initialized 1
