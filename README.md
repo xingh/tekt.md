@@ -154,6 +154,7 @@ Five documents take you from composition to a shared, working home-lab stack:
 | Tool | Version | Purpose | Upstream |
 | --- | --- | --- | --- |
 | Git | latest | Version control — required first (Homebrew depends on it) | git-scm.com |
+| GitHub CLI | latest | Issues, pull requests and releases from the terminal (`gh auth login`) | GitHub |
 | Homebrew | 5.x | Package manager for macOS/Linux | Homebrew maintainers |
 | Go | 1.26.2 | Runtime for Tekt-native tools | The Go Authors |
 | Python | 3.14 via pyenv | Scripting, ML tooling, Python agents | PSF / pyenv contributors |

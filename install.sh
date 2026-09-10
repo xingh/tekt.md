@@ -4,7 +4,7 @@
 # Tekt Platform — Full Environment Bootstrap
 # https://tekt.md
 #
-# Installs: Homebrew, Go, Python (pyenv), nvm/Node, rclone, AWS CLI,
+# Installs: Homebrew, GitHub CLI, Go, Python (pyenv), nvm/Node, rclone, AWS CLI,
 #           VSCode, Docker, Tailscale, ngrok, Ollama, Claude Code,
 #           Claude Desktop (macOS), Zed (+ Agent mode), OpenClaw,
 #           PicoClaw, Hermes Agent, ZeroClaw, Nanobot, NanoClaw
@@ -228,6 +228,56 @@ install_git() {
   else
     warn "Git installation failed. Many downstream tools depend on Git."
     warn "Install manually: https://git-scm.com/downloads"
+  fi
+}
+
+# =============================================================================
+# 1b. GitHub CLI (gh) — issues, pull requests and releases from the terminal
+# =============================================================================
+install_gh() {
+  section "GitHub CLI (gh)"
+  if command_exists gh; then
+    success "gh already installed — $(gh --version | head -1)"
+    return
+  fi
+
+  if command_exists brew; then
+    brew install gh --quiet || true
+  elif [ "$(os_type)" = "linux" ]; then
+    require_sudo || return 1
+    local distro; distro="$(linux_distro)"
+    case "$distro" in
+      ubuntu|debian|linuxmint|pop)
+        $SUDO mkdir -p -m 755 /etc/apt/keyrings
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+          | $SUDO tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
+        $SUDO chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+          | $SUDO tee /etc/apt/sources.list.d/github-cli.list >/dev/null
+        $SUDO apt-get update -q && $SUDO apt-get install -y -q gh
+        ;;
+      fedora)
+        $SUDO dnf install -y gh
+        ;;
+      rhel|centos|rocky|alma)
+        $SUDO curl -fsSL -o /etc/yum.repos.d/gh-cli.repo https://cli.github.com/packages/rpm/gh-cli.repo
+        $SUDO dnf install -y gh
+        ;;
+      arch|manjaro)
+        $SUDO pacman -S --noconfirm github-cli
+        ;;
+      *)
+        warn "Unknown distro ($distro) — install gh by hand: https://github.com/cli/cli#installation"
+        return 1
+        ;;
+    esac
+  fi
+
+  if command_exists gh; then
+    success "gh $(gh --version | head -1 | awk '{print $3}') installed — sign in once with: gh auth login"
+  else
+    warn "gh didn't install. See https://github.com/cli/cli#installation"
+    return 1
   fi
 }
 
@@ -1919,6 +1969,7 @@ print_summary() {
 
   # ── Tekt.Dev ──
   check "Git"             git
+  check "GitHub CLI"      gh
   check "Homebrew"        brew
   check "Go"              go
   check "Python"          python3
@@ -2005,6 +2056,7 @@ tekt_status() {
         code)    ver="$(code --version | head -1)" ;;
         docker)  ver="$(docker --version 2>/dev/null)" ;;
         claude)  ver="$(claude --version 2>/dev/null || echo 'installed')" ;;
+        gh)      ver="$(gh --version 2>/dev/null | head -1)" ;;
         *)       ver="$(${cmd} --version 2>/dev/null || echo 'installed')" ;;
       esac
       printf "  ${GREEN}✓${RESET}  %-18s %s\n" "$label" "$ver"
@@ -2018,6 +2070,7 @@ tekt_status() {
 
   echo -e "${BOLD}Tekt.Dev — Development Environment${RESET}"
   check_tool "Git"             git       dev
+  check_tool "GitHub CLI"      gh        dev
   check_tool "Homebrew"        brew      dev
   check_tool "Go"              go        dev
   check_tool "Python"          python3   dev
@@ -2170,6 +2223,7 @@ main() {
   # ── Tekt.Dev ──
   install_git           || warn "Git install failed — continuing..."
   install_homebrew      || warn "Homebrew install failed — continuing..."
+  install_gh            || warn "GitHub CLI install failed — continuing..."
   install_system_deps   || warn "System deps install failed — continuing..."
   install_go            || warn "Go install failed — continuing..."
   install_python        || warn "Python install failed — continuing..."

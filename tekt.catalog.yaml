@@ -54,6 +54,13 @@ layers:
         cmd: git
         upstream: "Software Freedom Conservancy / git-scm.com"
         docs: https://git-scm.com
+      - name: GitHub CLI
+        cmd: gh
+        upstream: "GitHub — cli.github.com (MIT)"
+        repo: https://github.com/cli/cli
+        docs: https://cli.github.com/manual/
+        install_windows: "winget install --id GitHub.cli -e"
+        note: "Sign in once with: gh auth login"
       - name: Homebrew
         cmd: brew
         upstream: "Homebrew maintainers — brew.sh"

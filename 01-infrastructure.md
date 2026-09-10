@@ -38,6 +38,28 @@ git config --global user.email "you@example.com"
 
 Docs: [git-scm.com](https://git-scm.com)
 
+## GitHub CLI (gh)
+
+The `gh` command lets you and your agents work with GitHub from a terminal: issues, pull requests and releases. Tekt installs it right after Git and Homebrew.
+
+```bash
+# macOS / Linuxbrew
+brew install gh
+# Ubuntu/Debian (official apt repo)
+sudo mkdir -p -m 755 /etc/apt/keyrings
+curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
+sudo apt-get update && sudo apt-get install -y gh
+# Fedora
+sudo dnf install -y gh
+# Arch
+sudo pacman -S --noconfirm github-cli
+# Windows (PowerShell)
+winget install --id GitHub.cli -e
+```
+
+Then sign in once with `gh auth login`. Docs: [cli.github.com](https://cli.github.com)
+
 ## 2. Homebrew (macOS/Linux)
 
 ```bash

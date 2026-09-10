@@ -8,6 +8,13 @@ permalink: /changelog/index.html
 
 # Changelog
 
+## v0.5.0 — Solid ground
+
+Installs you can trust, on every OS.
+
+- **Windows reports honestly** (#28). Before installing anything, Tekt checks that winget's package sources work, and fixes them when it can (`winget source reset`). When it can't, it tells you the exact commands to run as Administrator. An install only shows `[OK]` if winget succeeded and the command is really on your PATH. A summary lists anything that failed by name.
+- **GitHub CLI everywhere** (#26). `gh` is installed on macOS, Ubuntu/Debian, Fedora/RHEL, Arch and Windows, and it appears in `tekt status` and in the catalog.
+
 ## v0.4.0 — Shared skills
 
 Share skills with colleagues the way you share documents (#55).
