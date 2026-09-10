@@ -21,8 +21,8 @@
       "blurb": "Agent runtimes and clients, from Claude Code to single-binary edge agents." },
     { "kind": "mcp",   "title": "MCP servers", "status": "growing",
       "blurb": "Tools your agents can call, served from one hub. Hand-picked additions land here." },
-    { "kind": "skill", "title": "Skills",      "status": "curating",
-      "blurb": "Hand-curated, tested skills your agents load for one kind of job." },
+    { "kind": "skill", "title": "Skills",      "status": "growing",
+      "blurb": "Hand-curated, tested skills your agents load for one kind of job. Add one to a Space with tekt skill add." },
     { "kind": "intelligence", "title": "Intelligence", "status": "bring-your-own", "catalogOnly": true,
       "blurb": "Tekt ships no model and no keys. Point your agents at the provider you choose, by API or through the provider's own client." }
   ],

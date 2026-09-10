@@ -2156,6 +2156,97 @@ tekt_gui() {
   success "RcloneView is opening — use it to browse and copy files between your computer and your cloud storage. Your Spaces live in $TEKT_SPACES."
 }
 
+# =============================================================================
+# Skill shelf — hand-curated skills from the Tekt catalog (tekt skill shelf | add)
+# =============================================================================
+tekt_catalog_file() {   # a readable tekt.catalog.yaml: $TEKT_CATALOG, next to this script, or from tekt.md
+  local here f
+  if [ -n "${TEKT_CATALOG:-}" ] && [ -f "$TEKT_CATALOG" ]; then echo "$TEKT_CATALOG"; return 0; fi
+  here="$(cd "$(dirname "${BASH_SOURCE[0]:-.}")" 2>/dev/null && pwd)"
+  if [ -n "$here" ] && [ -f "$here/tekt.catalog.yaml" ]; then echo "$here/tekt.catalog.yaml"; return 0; fi
+  f="${TMPDIR:-/tmp}/tekt.catalog.$$.yaml"
+  if curl -fsSL https://tekt.md/tekt.catalog.yaml -o "$f"; then echo "$f"; return 0; fi
+  return 1
+}
+
+catalog_skills() {      # name, summary, source (separated by \037) for each entry under skills:
+  awk '
+    function flush() { if (n != "") print n "\037" s "\037" u; n = ""; s = ""; u = "" }
+    /^skills:/ { on = 1; next }
+    on && /^[^ #]/ { flush(); on = 0 }
+    on && /^  [a-z0-9-]+:[ \t]*$/ { flush(); n = $1; sub(/:$/, "", n); next }
+    on && /^    summary:/ { s = $0; sub(/^    summary:[ \t]*"?/, "", s); sub(/"[ \t]*$/, "", s); next }
+    on && /^    source:/ { u = $0; sub(/^    source:[ \t]*/, "", u); gsub(/"/, "", u); next }
+    END { flush() }
+  ' "$1"
+}
+
+skill_shelf() {
+  section "The skill shelf — hand-curated skills"
+  local cat name summary source mark have
+  if ! cat="$(tekt_catalog_file)"; then error "Couldn't read the catalog. Check your connection and try again."; return 1; fi
+  while IFS=$'\037' read -r name summary source; do
+    have=""
+    if compgen -G "$TEKT_SPACES/*/skills/$name/SKILL.md" >/dev/null 2>&1 || [ -f "$TEKT_CLAUDE_SKILLS/$name/SKILL.md" ]; then
+      have="  (you have it)"
+    fi
+    if [ -n "$source" ]; then mark="${GREEN}●${RESET}"; else mark="${YELLOW}○${RESET}"; fi
+    printf "  %b %-24s %s%s\n" "$mark" "$name" "$summary" "$have"
+  done < <(catalog_skills "$cat")
+  log "● add with:  tekt skill add <skill> [space]    ○ not a standalone skill yet — see https://tekt.md/catalog/#skill"
+}
+
+skill_add() {
+  local name="${1:-}" space="${2:-}" cat entry source dest dir only="" count=0
+  if [ -z "$name" ]; then error "Which skill?  tekt skill add <skill> [space]   (see: tekt skill shelf)"; return 1; fi
+  if ! cat="$(tekt_catalog_file)"; then error "Couldn't read the catalog. Check your connection and try again."; return 1; fi
+  entry="$(catalog_skills "$cat" | awk -F '\037' -v n="$name" '$1 == n')"
+  if [ -z "$entry" ]; then error "'$name' isn't on the shelf. See:  tekt skill shelf"; return 1; fi
+  source="$(printf '%s' "$entry" | awk -F '\037' '{ print $3 }')"
+  if [ -z "$source" ]; then
+    warn "'$name' isn't a standalone skill yet. It comes with the arkitype plugin in Claude Code:"
+    warn "  /plugin marketplace add xingh/arkitype   then   /plugin install arkitype@arkitype"
+    return 1
+  fi
+  if [ -z "$space" ]; then
+    for dir in "$TEKT_SPACES"/*/; do
+      dir="${dir%/}"
+      [ -f "$dir/.tekt-space" ] || continue
+      count=$((count + 1)); only="$(basename "$dir")"
+    done
+    if [ "$count" -eq 1 ]; then
+      space="$only"
+    elif [ "$count" -gt 1 ]; then
+      error "You have several Spaces. Pick one:  tekt skill add $name <space>   (see: tekt space list)"
+      return 1
+    fi
+  fi
+  if [ -n "$space" ]; then
+    if [ ! -f "$TEKT_SPACES/$space/.tekt-space" ]; then error "No Space named '$space'. See:  tekt space list"; return 1; fi
+    dest="$TEKT_SPACES/$space/skills/$name"
+  else
+    dest="$TEKT_CLAUDE_SKILLS/$name"   # no Spaces yet: just for you
+  fi
+  if [ -f "$dest/SKILL.md" ]; then warn "You already have '$name' ($dest/SKILL.md)."; return 0; fi
+  local created=0
+  if [ ! -d "$dest" ]; then created=1; fi
+  mkdir -p "$dest"
+  if ! curl -fsSL "$source" -o "$dest/SKILL.md"; then
+    rm -f "$dest/SKILL.md"                              # never touch files that were already there
+    if [ "$created" -eq 1 ]; then rmdir "$dest" 2>/dev/null || true; fi
+    error "Couldn't download '$name'. Check your connection and try again."
+    return 1
+  fi
+  if [ -n "$space" ]; then
+    space_link_skills "$space"
+    success "Added '$name' to the $space Space and to your Claude Code."
+    log "Run  tekt space sync $space  and everyone in the Space gets it."
+  else
+    success "Added '$name' to your Claude Code ($dest)."
+    log "Make a Space to share skills with people:  tekt space add team drive"
+  fi
+}
+
 # The tekt command: a copy of this script on your PATH (tekt space …, tekt status)
 install_tekt_cli() {
   ensure_local_bin
@@ -2193,6 +2284,8 @@ Share with your AI and your people
   skill list                           Skills shared in your Spaces, and which are in Claude Code
   skill new <space> <name>             Start a skill in a Space; everyone gets it after sync
   skill link                           Re-link shared skills into Claude Code
+  skill shelf                          Hand-curated skills you can add in one step
+  skill add <skill> [space]            Add a curated skill to a Space (everyone gets it)
 
 Set up and check
   install        Install all Tekt tools (what the one-line installer runs)
@@ -2619,7 +2712,9 @@ case "${1:-}" in
       list|ls) skill_list ;;
       new)     skill_new "${2:-}" "${3:-}" ;;
       link)    space_link_skills && success "Shared skills linked into Claude Code ($TEKT_CLAUDE_SKILLS)" ;;
-      *) error "Unknown: skill ${1} — use list, new or link"; exit 1 ;;
+      shelf)   skill_shelf ;;
+      add)     skill_add "${2:-}" "${3:-}" ;;
+      *) error "Unknown: skill ${1} — use list, new, link, shelf or add"; exit 1 ;;
     esac
     ;;
   install)

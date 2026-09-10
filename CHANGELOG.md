@@ -8,6 +8,14 @@ permalink: /changelog/index.html
 
 # Changelog
 
+## v0.9.0 — Skill shelf
+
+Getting a good skill is one command, and it lands where your colleagues get it too (#46).
+
+- **`tekt skill shelf`** lists the hand-curated skills in the Tekt catalog, and marks the ones you already have.
+- **`tekt skill add <skill> [space]`** downloads a curated skill into a Space and links it into your Claude Code. The next sync shares it with everyone in the Space. With no Space yet, it installs the skill just for you.
+- **The first skills on the shelf** come from the arkitype plugin: `rfp-proposal-responder`, `domain-to-diligence` and `opportunity-finder`. The catalog marks them `available`, and it always reads the latest shelf from tekt.md.
+
 ## v0.8.0 — More AI apps
 
 Bring your own intelligence, in the app you like (#64).
