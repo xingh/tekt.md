@@ -39,6 +39,11 @@
 #         tekt skill shelf                # hand-curated skills you can add in one step
 #         tekt skill add <skill> [space]  # add a curated skill to a Space (everyone gets it)
 #
+# Tool shelf - hand-picked MCP servers for your AI apps:
+#         tekt tool shelf                              # the servers you can add
+#         tekt tool add <server> [space] [--app <app>] # register one (memory can live in a Space)
+#         tekt tool remove <server>                    # take Tekt's entry out of every app
+#
 # One-liner: irm https://tekt.md/install.ps1 | iex
 # Tip: for the full Linux-parity experience, install WSL2 (wsl --install)
 #      and run `bash install.sh` inside it.
@@ -1422,66 +1427,31 @@ function Get-CodexConfig {
     Join-Path $codexHome "config.toml"
 }
 
+# The Spaces server (tekt-spaces) is one caller of Register-Mcp: npx -y <pkg> <TektSpaces>
+function Get-SpacesMcpArgs { @("-y", $TektMcpPkg, $TektSpaces) }
+
 function Connect-ClaudeCode {
     if (-not (Test-Cmd "claude")) {
         Warn "Claude Code isn't installed - skipping. Install: irm https://claude.ai/install.ps1 | iex"
         return $false
     }
-    & claude @("mcp", "remove", "--scope", "user", $TektMcpName) 2>$null | Out-Null
-    # '--' is passed as a quoted array element so PowerShell hands it to claude untouched
-    & claude @("mcp", "add", "--scope", "user", $TektMcpName, "--", "cmd", "/c", "npx", "-y", $TektMcpPkg, $TektSpaces) 2>$null | Out-Null
-    if ($LASTEXITCODE -eq 0) {
+    if (Register-Mcp "claude-code" $TektMcpName "" "npx" (Get-SpacesMcpArgs)) {
         Success "Claude Code can use your Spaces (MCP server '$TektMcpName')"
         return $true
     }
-    Warn "Claude Code didn't accept the server. Add it by hand:"
-    Warn "  claude mcp add --scope user $TektMcpName -- cmd /c npx -y $TektMcpPkg `"$TektSpaces`""
     return $false
 }
 
 function Connect-ClaudeDesktop {
-    $cfg    = Get-ClaudeDesktopConfig
-    $cfgDir = Split-Path $cfg -Parent
-    if (-not (Test-ClaudeDesktop) -and -not (Test-Path -LiteralPath $cfgDir)) {
+    if (-not (Test-McpAppPresent "claude-desktop")) {
         Warn "Claude Desktop isn't installed - skipping. Get it at https://claude.ai/download"
         return $false
     }
-    New-Item -ItemType Directory -Force -Path $cfgDir | Out-Null
-    $untouched = "Couldn't update $cfg (the file must be valid JSON). Your original is untouched."
-
-    $data = $null
-    if (Test-Path -LiteralPath $cfg) {
-        try { Copy-Item -LiteralPath $cfg -Destination "$cfg.bak-tekt" -Force -ErrorAction Stop }
-        catch { Warn "Couldn't back up $cfg, so it was left alone."; return $false }
-        $raw = [IO.File]::ReadAllText($cfg)
-        if ($raw.Trim()) {
-            try { $data = $raw | ConvertFrom-Json -ErrorAction Stop }
-            catch { Warn $untouched; return $false }
-            if ($data -isnot [System.Management.Automation.PSCustomObject]) { Warn $untouched; return $false }
-        }
+    if (Register-Mcp "claude-desktop" $TektMcpName "" "npx" (Get-SpacesMcpArgs)) {
+        Success "Claude Desktop can use your Spaces after you restart it ($(Get-ClaudeDesktopConfig))"
+        return $true
     }
-    if ($null -eq $data) { $data = [pscustomobject]@{} }
-
-    # PowerShell 5.1 gives a PSCustomObject: add/replace properties with Add-Member -Force
-    $existing = $data.PSObject.Properties["mcpServers"]
-    if (-not $existing -or $null -eq $existing.Value) {
-        $data | Add-Member -NotePropertyName "mcpServers" -NotePropertyValue ([pscustomobject]@{}) -Force
-    } elseif ($existing.Value -isnot [System.Management.Automation.PSCustomObject]) {
-        Warn $untouched
-        return $false
-    }
-    $server = [pscustomobject]@{ command = "cmd"; args = @("/c", "npx", "-y", $TektMcpPkg, $TektSpaces) }
-    $data.mcpServers | Add-Member -NotePropertyName $TektMcpName -NotePropertyValue $server -Force
-
-    try {
-        $json = $data | ConvertTo-Json -Depth 20
-        [IO.File]::WriteAllText($cfg, $json + "`n", (New-Object System.Text.UTF8Encoding $false))
-    } catch {
-        Warn "Couldn't write $cfg. Your previous version is in $cfg.bak-tekt"
-        return $false
-    }
-    Success "Claude Desktop can use your Spaces after you restart it ($cfg)"
-    return $true
+    return $false
 }
 
 function Connect-Codex {
@@ -1489,43 +1459,11 @@ function Connect-Codex {
         Warn "Codex CLI isn't installed - skipping. Install: npm install -g @openai/codex"
         return $false
     }
-    $cfg    = Get-CodexConfig
-    $header = "[mcp_servers.$TektMcpName]"
-    New-Item -ItemType Directory -Force -Path (Split-Path $cfg -Parent) | Out-Null
-
-    $lines = [System.Collections.Generic.List[string]]::new()
-    if (Test-Path -LiteralPath $cfg) {
-        try { Copy-Item -LiteralPath $cfg -Destination "$cfg.bak-tekt" -Force -ErrorAction Stop }
-        catch { Warn "Couldn't back up $cfg, so it was left alone."; return $false }
-        # drop Tekt's previous block (up to the next [section]), keep everything else
-        $skip = $false
-        foreach ($line in [IO.File]::ReadAllLines($cfg)) {
-            if ($line.Trim() -eq $header) { $skip = $true; continue }
-            if ($line.StartsWith("[")) { $skip = $false }
-            if (-not $skip) { $lines.Add($line) }
-        }
-        while ($lines.Count -gt 0 -and -not $lines[$lines.Count - 1].Trim()) { $lines.RemoveAt($lines.Count - 1) }
+    if (Register-Mcp "codex" $TektMcpName "" "npx" (Get-SpacesMcpArgs)) {
+        Success "Codex can use your Spaces ($(Get-CodexConfig))"
+        return $true
     }
-
-    # TOML literal strings ('...') need no backslash escaping; a path containing ' needs a basic string
-    $spacesToml = if ($TektSpaces.Contains("'")) {
-        '"' + (($TektSpaces -replace '\\', '\\') -replace '"', '\"') + '"'
-    } else {
-        "'" + $TektSpaces + "'"
-    }
-    if ($lines.Count -gt 0) { $lines.Add("") }
-    $lines.Add($header)
-    $lines.Add('command = "cmd"')
-    $lines.Add("args = ['/c', 'npx', '-y', '$TektMcpPkg', $spacesToml]")
-
-    try {
-        [IO.File]::WriteAllText($cfg, (($lines -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding $false))
-    } catch {
-        Warn "Couldn't write $cfg. Your previous version is in $cfg.bak-tekt"
-        return $false
-    }
-    Success "Codex can use your Spaces ($cfg)"
-    return $true
+    return $false
 }
 
 function Get-XdgConfigHome {
@@ -1562,44 +1500,11 @@ function Connect-OpenCode {
         Warn "opencode isn't installed - skipping. Install: npm i -g opencode-ai@latest"
         return $false
     }
-    $cfg = Get-OpenCodeConfig
-    New-Item -ItemType Directory -Force -Path (Split-Path $cfg -Parent) | Out-Null
-    $server = [pscustomobject]@{ type = "local"; command = @("cmd", "/c", "npx", "-y", $TektMcpPkg, $TektSpaces); enabled = $true }
-    $snippet = "  `"$TektMcpName`": " + ($server | ConvertTo-Json -Compress -Depth 5)
-    $manual = {
-        Warn "Couldn't update $cfg by itself (it may contain comments). Add this under `"mcp`":"
-        Warn $snippet
+    if (Register-Mcp "opencode" $TektMcpName "" "npx" (Get-SpacesMcpArgs)) {
+        Success "opencode can use your Spaces ($(Get-OpenCodeConfig))"
+        return $true
     }
-
-    $data = $null
-    if (Test-Path -LiteralPath $cfg) {
-        try { Copy-Item -LiteralPath $cfg -Destination "$cfg.bak-tekt" -Force -ErrorAction Stop }
-        catch { Warn "Couldn't back up $cfg, so it was left alone."; return $false }
-        $raw = [IO.File]::ReadAllText($cfg)
-        if ($raw.Trim()) {
-            if (-not (Test-PlainJson $raw)) { & $manual; return $false }
-            try { $data = $raw | ConvertFrom-Json -ErrorAction Stop } catch { & $manual; return $false }
-            if ($data -isnot [System.Management.Automation.PSCustomObject]) { & $manual; return $false }
-        }
-    }
-    if ($null -eq $data) { $data = [pscustomobject]@{ '$schema' = "https://opencode.ai/config.json" } }
-
-    $existing = $data.PSObject.Properties["mcp"]
-    if (-not $existing -or $null -eq $existing.Value) {
-        $data | Add-Member -NotePropertyName "mcp" -NotePropertyValue ([pscustomobject]@{}) -Force
-    } elseif ($existing.Value -isnot [System.Management.Automation.PSCustomObject]) {
-        & $manual; return $false
-    }
-    $data.mcp | Add-Member -NotePropertyName $TektMcpName -NotePropertyValue $server -Force
-
-    try {
-        [IO.File]::WriteAllText($cfg, ($data | ConvertTo-Json -Depth 20) + "`n", (New-Object System.Text.UTF8Encoding $false))
-    } catch {
-        Warn "Couldn't write $cfg. Your previous version is in $cfg.bak-tekt"
-        return $false
-    }
-    Success "opencode can use your Spaces ($cfg)"
-    return $true
+    return $false
 }
 
 function Connect-Crush {
@@ -1607,39 +1512,444 @@ function Connect-Crush {
         Warn "crush isn't installed - skipping. Install: winget install charmbracelet.crush"
         return $false
     }
-    $cfg   = Get-CrushConfig
-    $begin = "# >>> $TektMcpName (managed by tekt connect) >>>"
-    $end   = "# <<< $TektMcpName <<<"
-    # crushrc is Bash: inside double quotes, escape \ " $ and backtick
-    $path  = $TektSpaces -replace '([\\"$`])', '\$1'
-    New-Item -ItemType Directory -Force -Path (Split-Path $cfg -Parent) | Out-Null
-
-    $lines = [System.Collections.Generic.List[string]]::new()
-    if (Test-Path -LiteralPath $cfg) {
-        try { Copy-Item -LiteralPath $cfg -Destination "$cfg.bak-tekt" -Force -ErrorAction Stop }
-        catch { Warn "Couldn't back up $cfg, so it was left alone."; return $false }
-        # drop Tekt's previous block (begin..end markers), keep everything else
-        $skip = $false
-        foreach ($line in [IO.File]::ReadAllLines($cfg)) {
-            if (-not $skip -and $line -eq $begin) { $skip = $true; continue }
-            if ($skip) { if ($line -eq $end) { $skip = $false }; continue }
-            $lines.Add($line)
-        }
-        while ($lines.Count -gt 0 -and -not $lines[$lines.Count - 1].Trim()) { $lines.RemoveAt($lines.Count - 1) }
+    if (Register-Mcp "crush" $TektMcpName "" "npx" (Get-SpacesMcpArgs)) {
+        Success "crush can use your Spaces ($(Get-CrushConfig))"
+        return $true
     }
-    if ($lines.Count -gt 0) { $lines.Add("") }
-    $lines.Add($begin)
-    $lines.Add("mcp add $TektMcpName --command cmd --args /c --args npx --args -y --args $TektMcpPkg --args `"$path`"")
-    $lines.Add($end)
+    return $false
+}
 
+# -- MCP registration: one writer per AI app, shared by tekt connect and tekt tool --
+# Register-Mcp <app> <name> <env "KEY=VALUE" or ""> <command> <args[]>
+# On Windows every launch is "cmd /c <command> <args...>". Re-running replaces Tekt's
+# entry of that name and leaves everything else in the config alone. Formats stay
+# compatible with configs written by v0.3/v0.8 (same Codex header, same crush markers).
+$McpApps = @("claude-code", "claude-desktop", "codex", "opencode", "crush")
+
+function Get-McpAppLabel($app) {
+    switch ($app) {
+        "claude-code"    { return "Claude Code" }
+        "claude-desktop" { return "Claude Desktop" }
+        "codex"          { return "Codex" }
+        "opencode"       { return "opencode" }
+        "crush"          { return "crush" }
+    }
+    return [string]$app
+}
+
+function Resolve-McpApp($app) {   # a word the user typed -> app id, or ""
+    switch -Regex (([string]$app).Trim().ToLowerInvariant()) {
+        '^(claude-code|claude|code)$' { return "claude-code" }
+        '^(claude-desktop|desktop)$'  { return "claude-desktop" }
+        '^(codex|opencode|crush)$'    { return $Matches[1] }
+    }
+    return ""
+}
+
+function Test-McpAppPresent($app) {
+    switch ($app) {
+        "claude-code"    { return (Test-Cmd "claude") }
+        "claude-desktop" { return ((Test-ClaudeDesktop) -or (Test-Path -LiteralPath (Split-Path (Get-ClaudeDesktopConfig) -Parent))) }
+        "codex"          { return (Test-Cmd "codex") }
+        "opencode"       { return (Test-Cmd "opencode") }
+        "crush"          { return (Test-Cmd "crush") }
+    }
+    return $false
+}
+
+function Split-McpEnv($envKV) {   # "KEY=VALUE" -> @(KEY, VALUE); @() when empty
+    if (-not $envKV) { return @() }
+    $i = ([string]$envKV).IndexOf("=")
+    if ($i -lt 1) { return @() }
+    return @($envKV.Substring(0, $i), $envKV.Substring($i + 1))
+}
+
+function ConvertTo-TomlString($s) {   # TOML literal '...' (no backslash escaping) unless it contains '
+    if ($s.Contains("'")) { return '"' + (($s -replace '\\', '\\') -replace '"', '\"') + '"' }
+    return "'" + $s + "'"
+}
+
+function ConvertTo-CrushArg($s) {   # crushrc is Bash: a bare word when safe, else "..." with \ " $ ` escaped
+    if ($s -cmatch '^(/[A-Za-z]|[A-Za-z0-9@%+=:,._-][A-Za-z0-9@%+=:,./_-]*)$') { return $s }
+    return '"' + ($s -replace '([\\"$`])', '\$1') + '"'
+}
+
+# Open a JSON config for editing, backing it up first. Returns @{ Ok; Data; Why }.
+# JSONC (comments/trailing commas) and invalid JSON are refused, so they're never rewritten.
+function Open-McpJson($cfg) {
+    if (-not (Test-Path -LiteralPath $cfg)) { return @{ Ok = $true; Data = $null; Why = "" } }
+    try { Copy-Item -LiteralPath $cfg -Destination "$cfg.bak-tekt" -Force -ErrorAction Stop }
+    catch { return @{ Ok = $false; Data = $null; Why = "backup" } }
+    $raw = [IO.File]::ReadAllText($cfg)
+    if (-not $raw.Trim()) { return @{ Ok = $true; Data = $null; Why = "" } }
+    if (-not (Test-PlainJson $raw)) { return @{ Ok = $false; Data = $null; Why = "jsonc" } }
+    try { $data = $raw | ConvertFrom-Json -ErrorAction Stop } catch { return @{ Ok = $false; Data = $null; Why = "invalid" } }
+    if ($data -isnot [System.Management.Automation.PSCustomObject]) { return @{ Ok = $false; Data = $null; Why = "invalid" } }
+    return @{ Ok = $true; Data = $data; Why = "" }
+}
+
+function Get-McpJsonMap($data, $prop) {   # $data.$prop as an object (created if missing); $null if it's something else
+    $p = $data.PSObject.Properties[$prop]
+    if (-not $p -or $null -eq $p.Value) {
+        $data | Add-Member -NotePropertyName $prop -NotePropertyValue ([pscustomobject]@{}) -Force
+        return $data.$prop
+    }
+    if ($p.Value -isnot [System.Management.Automation.PSCustomObject]) { return $null }
+    return $p.Value
+}
+
+function Save-McpJson($cfg, $data) {
     try {
-        [IO.File]::WriteAllText($cfg, (($lines -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding $false))
+        [IO.File]::WriteAllText($cfg, ($data | ConvertTo-Json -Depth 20) + "`n", (New-Object System.Text.UTF8Encoding $false))
+        return $true
     } catch {
         Warn "Couldn't write $cfg. Your previous version is in $cfg.bak-tekt"
         return $false
     }
-    Success "crush can use your Spaces ($cfg)"
-    return $true
+}
+
+# Lines of a text config without Tekt's block. $end = "" means TOML: the block runs
+# from the $begin header up to the next line starting with "[". Returns @{ Lines; Found }.
+function Read-LinesWithoutBlock($cfg, $begin, $end) {
+    $kept = [System.Collections.Generic.List[string]]::new()
+    $found = $false
+    if (Test-Path -LiteralPath $cfg) {
+        $skip = $false
+        foreach ($line in [IO.File]::ReadAllLines($cfg)) {
+            if ($end) {
+                if (-not $skip -and $line -eq $begin) { $skip = $true; $found = $true; continue }
+                if ($skip) { if ($line -eq $end) { $skip = $false }; continue }
+            } else {
+                if ($line.Trim() -eq $begin) { $skip = $true; $found = $true; continue }
+                if ($line.StartsWith("[")) { $skip = $false }
+                if ($skip) { continue }
+            }
+            $kept.Add($line)
+        }
+        while ($kept.Count -gt 0 -and -not $kept[$kept.Count - 1].Trim()) { $kept.RemoveAt($kept.Count - 1) }
+    }
+    return @{ Lines = $kept; Found = $found }
+}
+
+function Save-McpLines($cfg, $lines) {
+    $text = if ($lines.Count -gt 0) { ($lines -join "`n") + "`n" } else { "" }
+    try {
+        [IO.File]::WriteAllText($cfg, $text, (New-Object System.Text.UTF8Encoding $false))
+        return $true
+    } catch {
+        Warn "Couldn't write $cfg. Your previous version is in $cfg.bak-tekt"
+        return $false
+    }
+}
+
+function Backup-McpFile($cfg) {   # $true when there's nothing to back up or the copy worked
+    if (-not (Test-Path -LiteralPath $cfg)) { return $true }
+    try { Copy-Item -LiteralPath $cfg -Destination "$cfg.bak-tekt" -Force -ErrorAction Stop; return $true }
+    catch { Warn "Couldn't back up $cfg, so it was left alone."; return $false }
+}
+
+function Register-Mcp($app, $name, $envKV, $command, [string[]]$mcpArgs) {
+    $mcpArgs = @($mcpArgs | Where-Object { $null -ne $_ -and $_ -ne "" })
+    $kv      = @(Split-McpEnv $envKV)
+    $launch  = [string[]](@("/c", $command) + $mcpArgs)   # every launch: cmd /c <command> <args...>
+    switch ($app) {
+        "claude-code" {
+            & claude @("mcp", "remove", "--scope", "user", $name) 2>$null | Out-Null
+            $cl = @("mcp", "add", "--scope", "user", $name)
+            if ($kv.Count -eq 2) { $cl += @("-e", "$($kv[0])=$($kv[1])") }   # after the name: -e takes several values
+            $cl += @("--", "cmd") + $launch                                  # '--' as an array element reaches claude untouched
+            & claude @cl 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) { return $true }
+            $envPart = if ($kv.Count -eq 2) { "-e $($kv[0])=`"$($kv[1])`" " } else { "" }
+            $shown   = ($launch | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } }) -join " "
+            Warn "Claude Code didn't accept '$name'. Add it by hand:"
+            Warn "  claude mcp add --scope user $name $envPart-- cmd $shown"
+            return $false
+        }
+        "claude-desktop" {
+            $cfg = Get-ClaudeDesktopConfig
+            New-Item -ItemType Directory -Force -Path (Split-Path $cfg -Parent) | Out-Null
+            $untouched = "Couldn't update $cfg (the file must be valid JSON). Your original is untouched."
+            $r = Open-McpJson $cfg
+            if (-not $r.Ok) {
+                if ($r.Why -eq "backup") { Warn "Couldn't back up $cfg, so it was left alone." } else { Warn $untouched }
+                return $false
+            }
+            $data = if ($null -eq $r.Data) { [pscustomobject]@{} } else { $r.Data }
+            $map  = Get-McpJsonMap $data "mcpServers"
+            if ($null -eq $map) { Warn $untouched; return $false }
+            $server = [pscustomobject]@{ command = "cmd"; args = $launch }
+            if ($kv.Count -eq 2) { $server | Add-Member -NotePropertyName "env" -NotePropertyValue ([pscustomobject]@{ $kv[0] = $kv[1] }) }
+            $map | Add-Member -NotePropertyName $name -NotePropertyValue $server -Force
+            return (Save-McpJson $cfg $data)
+        }
+        "codex" {
+            $cfg    = Get-CodexConfig
+            $header = "[mcp_servers.$name]"
+            New-Item -ItemType Directory -Force -Path (Split-Path $cfg -Parent) | Out-Null
+            if (-not (Backup-McpFile $cfg)) { return $false }
+            $lines = (Read-LinesWithoutBlock $cfg $header "").Lines
+            if ($lines.Count -gt 0) { $lines.Add("") }
+            $lines.Add($header)
+            $lines.Add('command = "cmd"')
+            $lines.Add("args = [" + (($launch | ForEach-Object { ConvertTo-TomlString $_ }) -join ", ") + "]")
+            if ($kv.Count -eq 2) { $lines.Add("env = { $($kv[0]) = $(ConvertTo-TomlString $kv[1]) }") }
+            return (Save-McpLines $cfg $lines)
+        }
+        "opencode" {
+            $cfg = Get-OpenCodeConfig
+            New-Item -ItemType Directory -Force -Path (Split-Path $cfg -Parent) | Out-Null
+            $server = [pscustomobject]@{ type = "local"; command = [string[]](@("cmd") + $launch); enabled = $true }
+            if ($kv.Count -eq 2) { $server | Add-Member -NotePropertyName "environment" -NotePropertyValue ([pscustomobject]@{ $kv[0] = $kv[1] }) }
+            $snippet = "  `"$name`": " + ($server | ConvertTo-Json -Compress -Depth 5)
+            $r = Open-McpJson $cfg
+            if (-not $r.Ok) {
+                if ($r.Why -eq "backup") { Warn "Couldn't back up $cfg, so it was left alone." }
+                else { Warn "Couldn't update $cfg by itself (it may contain comments). Add this under `"mcp`":"; Warn $snippet }
+                return $false
+            }
+            $data = if ($null -eq $r.Data) { [pscustomobject]@{ '$schema' = "https://opencode.ai/config.json" } } else { $r.Data }
+            $map  = Get-McpJsonMap $data "mcp"
+            if ($null -eq $map) {
+                Warn "Couldn't update $cfg by itself. Add this under `"mcp`":"; Warn $snippet
+                return $false
+            }
+            $map | Add-Member -NotePropertyName $name -NotePropertyValue $server -Force
+            return (Save-McpJson $cfg $data)
+        }
+        "crush" {
+            $cfg   = Get-CrushConfig
+            $begin = "# >>> $name (managed by tekt connect) >>>"
+            $end   = "# <<< $name <<<"
+            New-Item -ItemType Directory -Force -Path (Split-Path $cfg -Parent) | Out-Null
+            if (-not (Backup-McpFile $cfg)) { return $false }
+            $lines = (Read-LinesWithoutBlock $cfg $begin $end).Lines
+            $line  = "mcp add $name --command cmd" + (($launch | ForEach-Object { " --args " + (ConvertTo-CrushArg $_) }) -join "")
+            if ($kv.Count -eq 2) { $line += " --env $($kv[0]) " + '"' + ($kv[1] -replace '([\\"$`])', '\$1') + '"' }
+            if ($lines.Count -gt 0) { $lines.Add("") }
+            $lines.Add($begin)
+            $lines.Add($line)
+            $lines.Add($end)
+            return (Save-McpLines $cfg $lines)
+        }
+    }
+    Err "Unknown AI app '$app'."
+    return $false
+}
+
+function Remove-McpJsonKey($cfg, $prop, $name) {   # $true if Tekt's entry was there and is gone now
+    if (-not (Test-Path -LiteralPath $cfg)) { return $false }
+    if (-not (Select-String -LiteralPath $cfg -SimpleMatch "`"$name`"" -Quiet)) { return $false }
+    $r = Open-McpJson $cfg
+    if (-not $r.Ok) { Warn "Couldn't edit $cfg by itself. Remove the `"$name`" entry under `"$prop`" by hand."; return $false }
+    if ($null -eq $r.Data) { return $false }
+    $p = $r.Data.PSObject.Properties[$prop]
+    if (-not $p -or $p.Value -isnot [System.Management.Automation.PSCustomObject] -or -not $p.Value.PSObject.Properties[$name]) { return $false }
+    $p.Value.PSObject.Properties.Remove($name)
+    return (Save-McpJson $cfg $r.Data)
+}
+
+function Remove-McpLineBlock($cfg, $begin, $end) {   # $true if Tekt's block was there and is gone now
+    if (-not (Test-Path -LiteralPath $cfg)) { return $false }
+    $r = Read-LinesWithoutBlock $cfg $begin $end
+    if (-not $r.Found) { return $false }
+    if (-not (Backup-McpFile $cfg)) { return $false }
+    return (Save-McpLines $cfg $r.Lines)
+}
+
+function Unregister-Mcp($app, $name) {   # $true if Tekt's entry was removed
+    switch ($app) {
+        "claude-code" {
+            if (-not (Test-Cmd "claude")) { return $false }
+            # Only claim a removal when Claude Code's config really lists it (don't trust the exit code alone)
+            $ccJson = Join-Path $HOME ".claude.json"
+            if (-not ((Test-Path -LiteralPath $ccJson) -and (Select-String -LiteralPath $ccJson -SimpleMatch "`"$name`"" -Quiet))) { return $false }
+            & claude @("mcp", "remove", "--scope", "user", $name) 2>$null | Out-Null
+            return ($LASTEXITCODE -eq 0)
+        }
+        "claude-desktop" { return (Remove-McpJsonKey (Get-ClaudeDesktopConfig) "mcpServers" $name) }
+        "opencode"       { return (Remove-McpJsonKey (Get-OpenCodeConfig) "mcp" $name) }
+        "codex"          { return (Remove-McpLineBlock (Get-CodexConfig) "[mcp_servers.$name]" "") }
+        "crush"          { return (Remove-McpLineBlock (Get-CrushConfig) "# >>> $name (managed by tekt connect) >>>" "# <<< $name <<<") }
+    }
+    return $false
+}
+
+function Test-McpRegistered($name) {   # is a server of this name in any AI app's config?
+    foreach ($f in @((Join-Path $HOME ".claude.json"), (Get-ClaudeDesktopConfig), (Get-OpenCodeConfig))) {
+        if ((Test-Path -LiteralPath $f) -and (Select-String -LiteralPath $f -SimpleMatch "`"$name`"" -Quiet)) { return $true }
+    }
+    $codex = Get-CodexConfig
+    if ((Test-Path -LiteralPath $codex) -and (Select-String -LiteralPath $codex -SimpleMatch "[mcp_servers.$name]" -Quiet)) { return $true }
+    $crush = Get-CrushConfig
+    if ((Test-Path -LiteralPath $crush) -and (Select-String -LiteralPath $crush -SimpleMatch "# >>> $name (managed by tekt connect) >>>" -Quiet)) { return $true }
+    return $false
+}
+
+# -- Tool shelf: hand-picked MCP servers from the catalog (tekt tool shelf | add | remove)
+# Entries under mcp_servers: as { Name, Command, Args, SpaceEnv, Needs, Summary, Status } - plain regex.
+function Get-CatalogTools($file) {
+    $tools = [System.Collections.Generic.List[object]]::new()
+    $on = $false; $cur = $null
+    foreach ($line in [IO.File]::ReadAllLines($file)) {
+        if (-not $on) { if ($line -match '^mcp_servers:') { $on = $true }; continue }
+        if ($line -match '^[^ #]') { break }
+        if ($line -match '^  ([a-z0-9-]+):\s*$') {
+            $cur = [pscustomobject]@{ Name = $Matches[1]; Command = ""; Args = ""; SpaceEnv = ""; Needs = ""; Summary = ""; Status = "" }
+            $tools.Add($cur)
+            continue
+        }
+        if (-not $cur) { continue }
+        if ($line -match '^    (command|args|space_env|needs|summary|status):\s*(.*?)\s*$') {
+            $field = $Matches[1]; $val = $Matches[2]
+            if ($val.Length -ge 2 -and $val.StartsWith('"') -and $val.EndsWith('"')) { $val = $val.Substring(1, $val.Length - 2) }
+            switch ($field) {
+                "command"   { $cur.Command  = $val }
+                "args"      { $cur.Args     = $val }
+                "space_env" { $cur.SpaceEnv = $val }
+                "needs"     { $cur.Needs    = $val }
+                "summary"   { $cur.Summary  = $val }
+                "status"    { $cur.Status   = $val }
+            }
+        }
+    }
+    return $tools.ToArray()
+}
+
+function Tool-Shelf {
+    Section "The tool shelf - hand-picked MCP servers for your AI"
+    $cat = Get-TektCatalogFile
+    if (-not $cat) { Err "Couldn't read the catalog. Check your connection and try again."; return }
+    $tools = @(Get-CatalogTools $cat)
+    if ($tools.Count -eq 0) { Warn "The catalog doesn't list any tools yet."; return }
+    foreach ($t in $tools) {
+        $isSpaces = ($t.Name -eq "filesystem")
+        $regName  = if ($isSpaces) { $TektMcpName } else { "tekt-$($t.Name)" }
+        $ready    = $isSpaces -or ($t.Status -eq "available" -and $t.Command)
+        $tag = ""
+        if (Test-McpRegistered $regName) { $tag = "  (connected)" }
+        elseif ($isSpaces) { $tag = "  (tekt connect)" }
+        elseif ($ready -and $t.Needs -and -not (Test-Cmd $t.Needs)) { $tag = "  (needs $($t.Needs))" }
+        if ($ready) { Write-Host "  * " -ForegroundColor Green -NoNewline }
+        else        { Write-Host "  o " -ForegroundColor Yellow -NoNewline }
+        Write-Host ("{0,-22} {1}{2}" -f $t.Name, $t.Summary, $tag)
+    }
+    Log "* add with:  tekt tool add <server> [space]    o not available yet    filesystem is your Spaces (tekt connect)"
+}
+
+function Tool-Add([string[]]$argv) {
+    $argv = @($argv)
+    $server = ""; $rawSpace = ""; $rawApp = ""
+    for ($i = 0; $i -lt $argv.Count; $i++) {
+        $a = [string]$argv[$i]
+        if ($a -eq "--app" -or $a -eq "-app") { if (($i + 1) -lt $argv.Count) { $rawApp = $argv[$i + 1]; $i++ }; continue }
+        if ($a -like "--app=*") { $rawApp = $a.Substring(6); continue }
+        if (-not $server) { $server = $a.Trim().ToLowerInvariant() } elseif (-not $rawSpace) { $rawSpace = $a }
+    }
+    if (-not $server) { Err "Which tool?  tekt tool add <server> [space] [--app <app>]   (see: tekt tool shelf)"; return }
+    $cat = Get-TektCatalogFile
+    if (-not $cat) { Err "Couldn't read the catalog. Check your connection and try again."; return }
+    $t = @(Get-CatalogTools $cat | Where-Object { $_.Name -eq $server }) | Select-Object -First 1
+    if (-not $t) { Err "'$server' isn't on the shelf. See:  tekt tool shelf"; return }
+    if ($t.Name -eq "filesystem") { Log "'filesystem' is how your AI reaches your Spaces (as '$TektMcpName'). Run:  tekt connect"; return }
+    if ($t.Status -ne "available" -or -not $t.Command) {
+        Warn "'$server' isn't available yet - it's still being curated. See:  tekt tool shelf"
+        return
+    }
+    if ($t.Needs -and -not (Test-Cmd $t.Needs)) {
+        if ($t.Needs -eq "uvx") { Err "'$server' needs uvx - install uv: https://docs.astral.sh/uv/" }
+        else                    { Err "'$server' needs $($t.Needs) - install it first, then try again." }
+        return
+    }
+
+    # Which apps: one (--app) or every app that's present
+    $apps = @()
+    if ($rawApp) {
+        $one = Resolve-McpApp $rawApp
+        if (-not $one) { Err "Unknown AI app '$rawApp'. Use: claude-code, claude-desktop, codex, opencode or crush."; return }
+        if (-not (Test-McpAppPresent $one)) { Warn "$(Get-McpAppLabel $one) isn't installed on this computer."; return }
+        $apps = @($one)
+    } else {
+        $apps = @($McpApps | Where-Object { Test-McpAppPresent $_ })
+        if ($apps.Count -eq 0) { Warn "No AI app found. Tekt adds tools to Claude Code, Claude Desktop, Codex, opencode and crush."; return }
+    }
+
+    # Knowledge that lives in a Space: KEY=<TektSpaces>\<space>\<path>
+    $envKV = ""; $space = ""; $envPath = ""
+    if ($t.SpaceEnv) {
+        if ($rawSpace) {
+            $space = ConvertTo-SpaceName $rawSpace
+        } else {
+            $dirs = @(Get-SpaceDirs)
+            if ($dirs.Count -eq 1) { $space = Split-Path $dirs[0] -Leaf }
+            elseif ($dirs.Count -gt 1) { Err "You have several Spaces. Pick one:  tekt tool add $server <space>   (see: tekt space list)"; return }
+        }
+        if ($space) {
+            $sdir = Join-Path $TektSpaces $space
+            if (-not (Test-Path -LiteralPath (Join-Path $sdir ".tekt-space"))) { Err "No Space named '$(if ($rawSpace) { $rawSpace } else { $space })'. See:  tekt space list"; return }
+            $kv = @(Split-McpEnv $t.SpaceEnv)
+            if ($kv.Count -eq 2) {
+                $rel     = $kv[1] -replace '[\\/]', [string][IO.Path]::DirectorySeparatorChar
+                $envPath = Join-Path $sdir $rel
+                New-Item -ItemType Directory -Force -Path (Split-Path $envPath -Parent) | Out-Null
+                $envKV   = "$($kv[0])=$envPath"
+            }
+        } else {
+            Log "No Space yet, so '$server' keeps its data on this computer only. To share it:  tekt space add team drive"
+        }
+    } elseif ($rawSpace) {
+        Log "'$server' doesn't keep anything in a Space, so '$rawSpace' isn't needed."
+    }
+
+    Section "Add $server"
+    # Registered as tekt-<server>, so Tekt never replaces or removes a server you added yourself
+    $regName = "tekt-$server"
+    $argList = @(([string]$t.Args) -split '\s+' | Where-Object { $_ })
+    $added = 0
+    foreach ($app in $apps) {
+        if (Register-Mcp $app $regName $envKV $t.Command $argList) {
+            Success "$server added to $(Get-McpAppLabel $app)"
+            $added++
+        }
+    }
+    if ($added -eq 0) { Warn "'$server' wasn't added to any app - see the messages above."; return }
+    Log "Your AI apps list it as '$regName'."
+    if ($envPath) { Log "$server keeps its data in $envPath - everyone in the $space Space shares it after  tekt space sync $space" }
+    Log "Restart your AI apps to pick it up. Remove it with:  tekt tool remove $server"
+}
+
+function Tool-Remove($rawName) {
+    if (-not $rawName) { Err "Which tool?  tekt tool remove <server>"; return }
+    $server = ([string]$rawName).Trim().ToLowerInvariant()
+    $spacesMsg = "'$server' is how your AI reaches your Spaces; tool remove leaves it alone. (It's set up by: tekt connect)"
+    if ($server -eq $TektMcpName) { Warn $spacesMsg; return }
+    if ($server.StartsWith("tekt-")) { $server = $server.Substring(5) }   # accept memory or tekt-memory
+    if ($server -eq "filesystem") { Warn $spacesMsg; return }
+    $cat = Get-TektCatalogFile
+    if ($cat -and -not (@(Get-CatalogTools $cat | Where-Object { $_.Name -eq $server }).Count)) {
+        Err "'$server' isn't on the shelf. See:  tekt tool shelf"; return
+    }
+    Section "Remove $server"
+    $removed = 0
+    foreach ($app in $McpApps) {
+        if (Unregister-Mcp $app "tekt-$server") { Success "Removed $server from $(Get-McpAppLabel $app)"; $removed++ }
+    }
+    if ($removed -eq 0) { Log "'$server' wasn't registered with any AI app - nothing to remove." }
+}
+
+function Invoke-ToolCmd($argv) {
+    $argv = @($argv)
+    $sub  = if ($argv.Count -ge 1 -and $argv[0]) { $argv[0] } else { "shelf" }
+    $more = @($argv | Select-Object -Skip 1)   # @(): a one-item array must not unroll into a bare string
+    switch ($sub) {
+        "shelf"  { Tool-Shelf }
+        "list"   { Tool-Shelf }
+        "ls"     { Tool-Shelf }
+        "add"    { Tool-Add $more }
+        "remove" { Tool-Remove $(if ($more.Count -ge 1) { $more[0] } else { "" }) }
+        "rm"     { Tool-Remove $(if ($more.Count -ge 1) { $more[0] } else { "" }) }
+        default  { Err "Unknown: tool $sub - use shelf, add or remove" }
+    }
 }
 
 function Tekt-Connect($app) {
@@ -1858,6 +2168,8 @@ switch ($Command) {
         $app = if ($Rest.Count -ge 1 -and $Rest[0]) { $Rest[0] } else { "all" }
         Tekt-Connect $app
     }
+    "tool"   { Refresh-SessionPath; Invoke-ToolCmd $Rest }
+    "tools"  { Refresh-SessionPath; Invoke-ToolCmd $Rest }
     "skill"  { Invoke-SkillCmd $Rest }
     "skills" { Invoke-SkillCmd $Rest }
     "space"  {
@@ -1882,7 +2194,7 @@ switch ($Command) {
         }
     }
     "help"   {
-        Write-Host "Usage: .\install.ps1 [status|catalog|mcp|ui|share <port>|space ...|skill ...|connect [app]|gui|cli|help]"
+        Write-Host "Usage: .\install.ps1 [status|catalog|mcp|ui|share <port>|space ...|skill ...|tool ...|connect [app]|gui|cli|help]"
         Write-Host "       (after 'cli' you can type 'tekt' instead of '.\install.ps1')"
         Write-Host "  (none)        Install all Tekt tools"
         Write-Host "  status        Check which tools are installed"
@@ -1910,6 +2222,11 @@ switch ($Command) {
         Write-Host "  skill link                            Re-link shared skills into Claude Code"
         Write-Host "  skill shelf                           Hand-curated skills you can add in one step"
         Write-Host "  skill add <skill> [space]             Add a curated skill to a Space (everyone gets it)"
+        Write-Host ""
+        Write-Host "Tool shelf: hand-picked MCP servers for your AI apps"
+        Write-Host "  tool shelf                            The servers you can add, and which are connected"
+        Write-Host "  tool add <server> [space] [--app <app>]  Add one to every AI app (or one); memory can live in a Space"
+        Write-Host "  tool remove <server>                  Take Tekt's entry out of every AI app"
         Write-Host ""
         Write-Host "Windows note: after installs, restart PowerShell, then run .\install.ps1 status"
     }

@@ -292,27 +292,48 @@ mcp_servers:
     upstream: "Anthropic / MCP reference servers"
     repo: https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem
     scope: /workspace
-    summary: "Read and write files in your Tekt workspace"
+    summary: "Read and write your Spaces (tekt connect adds it as tekt-spaces)"
     status: default
   fetch:
     package: "mcp-server-fetch"
     runner: uvx
     upstream: "Anthropic / MCP reference servers"
     repo: https://github.com/modelcontextprotocol/servers/tree/main/src/fetch
+    command: uvx
+    args: "mcp-server-fetch"
+    needs: uvx
     summary: "Fetch a web page and hand it to the agent as markdown"
-    status: default
+    status: available
   memory:
     package: "@modelcontextprotocol/server-memory"
     upstream: "Anthropic / MCP reference servers"
     repo: https://github.com/modelcontextprotocol/servers/tree/main/src/memory
-    summary: "A local knowledge-graph memory agents can write to and recall"
-    status: default
+    command: npx
+    args: "-y @modelcontextprotocol/server-memory"
+    space_env: "MEMORY_FILE_PATH=knowledge/memory.jsonl"
+    summary: "A knowledge-graph memory your AI writes to and recalls; put it in a Space to share it"
+    status: available
+  sequential-thinking:
+    upstream: "Anthropic / MCP reference servers"
+    repo: https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking
+    command: npx
+    args: "-y @modelcontextprotocol/server-sequential-thinking"
+    summary: "Step-by-step thinking for hard problems, with room to revise"
+    status: available
+  time:
+    upstream: "Anthropic / MCP reference servers"
+    repo: https://github.com/modelcontextprotocol/servers/tree/main/src/time
+    command: uvx
+    args: "mcp-server-time"
+    needs: uvx
+    summary: "Current time and time-zone conversions"
+    status: available
   github:
     package: "@modelcontextprotocol/server-github"
     upstream: "Anthropic / MCP reference servers"
     repo: https://github.com/modelcontextprotocol/servers-archived/tree/main/src/github
-    summary: "Issues, pull requests and repos through the GitHub API"
-    status: default
+    summary: "Issues, pull requests and repos through the GitHub API (moving to the official github/github-mcp-server)"
+    status: curating
     env:
       GITHUB_PERSONAL_ACCESS_TOKEN: "set-me"
 
