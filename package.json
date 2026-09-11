@@ -3,8 +3,11 @@
   "version": "1.0.0",
   "description": "tekt.md static site",
   "scripts": {
+    "profile": "node scripts/sync-profile.js",
+    "profile:check": "node scripts/sync-profile.js --check",
+    "prebuild": "npm run profile",
     "build": "eleventy",
-    "start": "eleventy --serve"
+    "start": "npm run profile && eleventy --serve"
   },
   "devDependencies": {
     "@11ty/eleventy": "^2.0.1",

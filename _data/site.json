@@ -8,45 +8,101 @@
     "not": "Tekt isn't an agent, a model or a platform.",
     "does": "It's the utility belt around them. Tekt manages the metadata, structure, processes and state of your harness, gets you started, and keeps your agents in sync through shared communications and knowledge tools. Every tool is pre-vetted and runs on your own infrastructure.",
     "items": [
-      { "k": "Metadata",  "v": "What's installed, where, which version, and who made it",   "where": "tekt.catalog.yaml" },
-      { "k": "Structure", "v": "How machines, agents and tools fit together",                "where": "arkitype layers 00 – 04" },
-      { "k": "Processes", "v": "How agents hand work to each other and to people",           "where": "MCPHub · n8n · LibreChat" },
-      { "k": "State",     "v": "One workspace and memory every agent can read and write",    "where": "Spaces on Drive, OneDrive or Dropbox · memory MCP" }
+      {
+        "k": "Metadata",
+        "v": "What's installed, where, which version, and who made it",
+        "where": "tekt.catalog.yaml"
+      },
+      {
+        "k": "Structure",
+        "v": "How machines, agents and tools fit together",
+        "where": "arkitype layers 00 – 04"
+      },
+      {
+        "k": "Processes",
+        "v": "How agents hand work to each other and to people",
+        "where": "MCPHub · n8n · LibreChat"
+      },
+      {
+        "k": "State",
+        "v": "One workspace and memory every agent can read and write",
+        "where": "Spaces on Drive, OneDrive or Dropbox · memory MCP"
+      }
     ]
   },
   "shelves": [
-    { "kind": "tool",  "title": "Tools",       "status": "shipping",
-      "blurb": "The toolchain, storage, network and UIs an AI stack stands on." },
-    { "kind": "agent", "title": "Agents",      "status": "shipping",
-      "blurb": "Agent runtimes and clients, from Claude Code to single-binary edge agents." },
-    { "kind": "mcp",   "title": "MCP servers", "status": "growing",
-      "blurb": "Tools your agents can call, served from one hub. Hand-picked additions land here." },
-    { "kind": "skill", "title": "Skills",      "status": "growing",
-      "blurb": "Hand-curated, tested skills your agents load for one kind of job. Add one to a Space with tekt skill add." },
-    { "kind": "intelligence", "title": "Intelligence", "status": "bring-your-own", "catalogOnly": true,
-      "blurb": "Tekt ships no model and no keys. Point your agents at the provider you choose, by API or through the provider's own client." }
+    {
+      "kind": "tool",
+      "title": "Tools",
+      "status": "shipping",
+      "blurb": "The toolchain, storage, network and UIs an AI stack stands on."
+    },
+    {
+      "kind": "agent",
+      "title": "Agents",
+      "status": "shipping",
+      "blurb": "Agent runtimes and clients, from Claude Code to single-binary edge agents."
+    },
+    {
+      "kind": "mcp",
+      "title": "MCP servers",
+      "status": "growing",
+      "blurb": "Tools your agents can call, served from one hub. Hand-picked additions land here."
+    },
+    {
+      "kind": "skill",
+      "title": "Skills",
+      "status": "growing",
+      "blurb": "Hand-curated, tested skills your agents load for one kind of job. Add one to a Space with tekt skill add."
+    },
+    {
+      "kind": "intelligence",
+      "title": "Intelligence",
+      "status": "bring-your-own",
+      "catalogOnly": true,
+      "blurb": "Tekt ships no model and no keys. Point your agents at the provider you choose, by API or through the provider's own client."
+    }
   ],
   "audiences": [
     {
-      "id": "builders", "verb": "Build", "who": "Builders",
+      "id": "builders",
+      "verb": "Build",
+      "who": "Builders",
       "gets": "A ready AI sandbox for AI engineers. Toolchain, local models, agent runtimes and MCP tools arrive in one pass, so the first hour goes to your idea.",
       "cmd": "bash install.sh && claude",
-      "layers": ["01", "03"]
+      "layers": [
+        "01",
+        "03"
+      ]
     },
     {
-      "id": "operators", "verb": "Run", "who": "Operators",
+      "id": "operators",
+      "verb": "Run",
+      "who": "Operators",
       "gets": "A stack you can keep running. Workspace sync, a private network, one status check, and HTTPS sharing in a single command.",
       "cmd": "bash install.sh status",
-      "layers": ["01", "02"]
+      "layers": [
+        "01",
+        "02"
+      ]
     },
     {
-      "id": "managers", "verb": "Steer", "who": "Managers",
+      "id": "managers",
+      "verb": "Steer",
+      "who": "Managers",
       "gets": "A clear view of the work. Chat and workflow UIs open in any browser, and a plain-language plan says what is installed and why.",
       "cmd": "https://workspace.your-tailnet.ts.net",
-      "layers": ["00", "04"]
+      "layers": [
+        "00",
+        "04"
+      ]
     }
   ],
-  "pillars": ["Sovereignty", "Security", "Privacy"],
+  "pillars": [
+    "Sovereignty",
+    "Security",
+    "Privacy"
+  ],
   "repo": "https://github.com/xingh/tekt.md",
   "catalog_version": "2026.07",
   "install": {
@@ -55,14 +111,26 @@
   },
   "brand": {
     "light": {
-      "ground": "#F6F8FC", "grid": "#E5EAF3", "surface": "#FFFFFF", "sunken": "#EEF2F8",
-      "ink": "#172033", "muted": "#5A6579", "line": "#CFD7E4",
-      "accent": "#6E56CF", "link": "#2E6BF6"
+      "ground": "#F6F8FC",
+      "grid": "#E5EAF3",
+      "surface": "#FFFFFF",
+      "sunken": "#EEF2F8",
+      "ink": "#172033",
+      "muted": "#5A6579",
+      "line": "#CFD7E4",
+      "accent": "#6E56CF",
+      "link": "#2E6BF6"
     },
     "dark": {
-      "ground": "#0B1220", "grid": "#141D30", "surface": "#101A2C", "sunken": "#0D1627",
-      "ink": "#E4E9F3", "muted": "#94A1B8", "line": "#24324C",
-      "accent": "#A495F2", "link": "#7AA2FF"
+      "ground": "#0B1220",
+      "grid": "#141D30",
+      "surface": "#101A2C",
+      "sunken": "#0D1627",
+      "ink": "#E4E9F3",
+      "muted": "#94A1B8",
+      "line": "#24324C",
+      "accent": "#A495F2",
+      "link": "#7AA2FF"
     },
     "fonts": {
       "display": "Barlow Condensed",
@@ -72,125 +140,433 @@
   },
   "layers": [
     {
-      "code": "00", "slug": "arkitype", "name": "Arkitype", "tekt": "composition",
-      "url": "/00-arkitype/", "color": "#6E56CF", "color_dark": "#A495F2",
+      "code": "00",
+      "slug": "arkitype",
+      "name": "Arkitype",
+      "tekt": "composition",
+      "url": "/00-arkitype/",
+      "color": "#6E56CF",
+      "color_dark": "#A495F2",
       "blurb": "What this instance is: layers, archetype, topology, signal flow.",
-      "tools": ["tekt.catalog.yaml", "archetypes", "topology"]
+      "tools": [
+        "tekt.catalog.yaml",
+        "archetypes",
+        "topology"
+      ]
     },
     {
-      "code": "01", "slug": "infrastructure", "name": "Infrastructure", "tekt": "tekt.dev · tekt.edge",
-      "url": "/01-infrastructure/", "color": "#56637A", "color_dark": "#9AA7BF",
+      "code": "01",
+      "slug": "infrastructure",
+      "name": "Infrastructure",
+      "tekt": "tekt.dev · tekt.edge",
+      "url": "/01-infrastructure/",
+      "color": "#56637A",
+      "color_dark": "#9AA7BF",
       "blurb": "Where it runs: dev toolchain, Docker, and the private mesh.",
-      "tools": ["git", "go", "python", "node", "docker", "tailscale", "ngrok"]
+      "tools": [
+        "git",
+        "go",
+        "python",
+        "node",
+        "docker",
+        "tailscale",
+        "ngrok"
+      ]
     },
     {
-      "code": "02", "slug": "database", "name": "Database", "tekt": "tekt.base",
-      "url": "/02-database/", "color": "#0E8A8C", "color_dark": "#3FC6C7",
+      "code": "02",
+      "slug": "database",
+      "name": "Database",
+      "tekt": "tekt.base",
+      "url": "/02-database/",
+      "color": "#0E8A8C",
+      "color_dark": "#3FC6C7",
       "blurb": "Where data lives: workspace sync, S3, and optional databases.",
-      "tools": ["rclone", "aws-cli", "s5cmd", "minio", "postgres"]
+      "tools": [
+        "rclone",
+        "aws-cli",
+        "s5cmd",
+        "minio",
+        "postgres"
+      ]
     },
     {
-      "code": "03", "slug": "software", "name": "Software", "tekt": "tekt.iris",
-      "url": "/03-software/", "color": "#2E6BF6", "color_dark": "#7AA2FF",
+      "code": "03",
+      "slug": "software",
+      "name": "Software",
+      "tekt": "tekt.iris",
+      "url": "/03-software/",
+      "color": "#2E6BF6",
+      "color_dark": "#7AA2FF",
       "blurb": "What runs: local models, agent runtimes, MCP servers.",
-      "tools": ["ollama", "claude-code", "openclaw", "hermes", "mcphub"]
+      "tools": [
+        "ollama",
+        "claude-code",
+        "openclaw",
+        "hermes",
+        "mcphub"
+      ]
     },
     {
-      "code": "04", "slug": "interface", "name": "Interface", "tekt": "tekt.cloud",
-      "url": "/04-interface/", "color": "#B8740E", "color_dark": "#F0AE45",
+      "code": "04",
+      "slug": "interface",
+      "name": "Interface",
+      "tekt": "tekt.cloud",
+      "url": "/04-interface/",
+      "color": "#B8740E",
+      "color_dark": "#F0AE45",
       "blurb": "Who uses it: chat, workflows, proxies, sharing from your lab.",
-      "tools": ["librechat", "n8n", "sovrant", "tailscale serve"]
+      "tools": [
+        "librechat",
+        "n8n",
+        "sovrant",
+        "tailscale serve"
+      ]
     }
   ],
   "nav": [
-    { "title": "Home", "url": "/", "sections": [
-      { "label": "Who it's for",        "slug": "who-its-for" },
-      { "label": "Why it's different",  "slug": "why-its-different" },
-      { "label": "Bring your own intelligence", "slug": "bring-your-own-intelligence" },
-      { "label": "Share with your people", "slug": "share-with-your-people" },
-      { "label": "Roadmap",             "slug": "roadmap" },
-      { "label": "Quick Start",         "slug": "quick-start" },
-      { "label": "After the install",   "slug": "after-the-install" },
-      { "label": "Documentation path",  "slug": "the-documentation-path" },
-      { "label": "What gets installed", "slug": "what-gets-installed" },
-      { "label": "Prerequisites",       "slug": "prerequisites" },
-      { "label": "Customizing",         "slug": "customizing" },
-      { "label": "Architecture",        "slug": "architecture-reference" },
-      { "label": "Troubleshooting",     "slug": "troubleshooting" },
-      { "label": "Credits",             "slug": "credits" }
-    ] },
-    { "title": "Catalog", "url": "/catalog/", "sections": [
-      { "label": "Tools",       "slug": "tool" },
-      { "label": "Agents",      "slug": "agent" },
-      { "label": "MCP servers", "slug": "mcp" },
-      { "label": "Skills",      "slug": "skill" },
-      { "label": "Intelligence (bring your own)", "slug": "intelligence" }
-    ] },
-    { "title": "Spaces", "url": "/spaces/", "sections": [
-      { "label": "What a Space is",       "slug": "what-a-space-is" },
-      { "label": "Make your first Space", "slug": "make-your-first-space" },
-      { "label": "Where it can live",     "slug": "where-it-can-live" },
-      { "label": "Invite people",         "slug": "invite-people" },
-      { "label": "Give your AI access",   "slug": "give-your-ai-access" },
-      { "label": "Tools & shared memory", "slug": "add-tools-and-shared-memory" },
-      { "label": "Share skills",          "slug": "share-skills" },
-      { "label": "See them in a window",  "slug": "see-your-spaces-in-a-window" },
-      { "label": "Everyday commands",     "slug": "everyday-commands" },
-      { "label": "Troubleshooting",       "slug": "troubleshooting" }
-    ] },
-    { "code": "00", "title": "Arkitype", "url": "/00-arkitype/", "sections": [
-      { "label": "The arkitype section", "slug": "the-00-arkitype-section" },
-      { "label": "Schema archetypes",    "slug": "schema-archetypes-memory-engine-vs-knowledge-engine" },
-      { "label": "Archetypes",           "slug": "archetypes" },
-      { "label": "Topology",             "slug": "topology" },
-      { "label": "The signal flow",      "slug": "the-signal-flow" },
-      { "label": "Round-trip editing",   "slug": "round-trip-editing" }
-    ] },
-    { "code": "01", "title": "Infrastructure", "url": "/01-infrastructure/", "sections": [
-      { "label": "Git",       "slug": "1-git" },
-      { "label": "GitHub CLI", "slug": "github-cli-gh" },
-      { "label": "Homebrew",  "slug": "2-homebrew-macoslinux" },
-      { "label": "Go",        "slug": "3-go" },
-      { "label": "Python",    "slug": "4-python-via-pyenv" },
-      { "label": "Node.js",   "slug": "5-nvm-nodejs" },
-      { "label": "VS Code",   "slug": "6-visual-studio-code" },
-      { "label": "Docker",    "slug": "7-docker-docker-compose" },
-      { "label": ".NET SDK",  "slug": "8-net-sdk" },
-      { "label": "Tailscale", "slug": "9-tailscale-private-mesh-network" },
-      { "label": "ngrok",     "slug": "10-ngrok-instant-public-tunnels" },
-      { "label": "Verify",    "slug": "verify-the-layer" }
-    ] },
-    { "code": "02", "title": "Database", "url": "/02-database/", "sections": [
-      { "label": "Workspace layout",        "slug": "workspace-layout" },
-      { "label": "rclone",                  "slug": "1-rclone-the-sync-backbone" },
-      { "label": "AWS CLI / s3cmd / s5cmd", "slug": "2-aws-cli-v2-s3cmd-s5cmd" },
-      { "label": "MinIO",                   "slug": "3-minio-your-own-s3-optional-but-sovereign" },
-      { "label": "Postgres + pgvector",     "slug": "4-postgresql-pgvector-optional" },
-      { "label": "Mongo + Meilisearch",     "slug": "5-mongodb-meilisearch-bundled-with-librechat" },
-      { "label": "SQLite",                  "slug": "6-sqlite-the-quiet-default" },
-      { "label": "Verify",                  "slug": "verify-the-layer" }
-    ] },
-    { "code": "03", "title": "Software", "url": "/03-software/", "sections": [
-      { "label": "Local models (Ollama)", "slug": "local-models" },
-      { "label": "The claw family",       "slug": "the-claw-family-friends" },
-      { "label": "MCP servers & MCPHub",  "slug": "mcp-servers-one-hub-four-locals-https-out" },
-      { "label": "Sovrant",               "slug": "sovrant-post-install-command-center" },
-      { "label": "Verify",                "slug": "verify-the-layer" }
-    ] },
-    { "code": "04", "title": "Interface", "url": "/04-interface/", "sections": [
-      { "label": "LibreChat",            "slug": "1-librechat-multi-model-chat-ui" },
-      { "label": "n8n",                  "slug": "2-n8n-workflow-automation" },
-      { "label": "MCPHub dashboard",     "slug": "3-mcphub-dashboard" },
-      { "label": "Reverse proxy",        "slug": "4-reverse-proxy-optional-one-hostname-for-everything" },
-      { "label": "Sharing (HTTPS out)",  "slug": "5-sharing-from-your-home-lab" },
-      { "label": "Sovrant UX contract",  "slug": "6-sovrant-ux-contract-claude-like-ergonomics-current-palette" },
-      { "label": "Study-hall checklist", "slug": "7-study-hall-checklist" }
-    ] },
-    { "title": "Downloads", "url": "/install.sh", "sections": [
-      { "label": "install.sh (Linux/macOS/WSL2)", "href": "/install.sh" },
-      { "label": "install.ps1 (Windows)",         "href": "/install.ps1" },
-      { "label": "tekt.catalog.yaml (pins)",      "href": "/tekt.catalog.yaml" },
-      { "label": "Changelog",                     "href": "/changelog/" }
-    ] }
+    {
+      "title": "Home",
+      "url": "/",
+      "sections": [
+        {
+          "label": "Who it's for",
+          "slug": "who-its-for"
+        },
+        {
+          "label": "Why it's different",
+          "slug": "why-its-different"
+        },
+        {
+          "label": "Bring your own intelligence",
+          "slug": "bring-your-own-intelligence"
+        },
+        {
+          "label": "Share with your people",
+          "slug": "share-with-your-people"
+        },
+        {
+          "label": "Roadmap",
+          "slug": "roadmap"
+        },
+        {
+          "label": "Quick Start",
+          "slug": "quick-start"
+        },
+        {
+          "label": "After the install",
+          "slug": "after-the-install"
+        },
+        {
+          "label": "Documentation path",
+          "slug": "the-documentation-path"
+        },
+        {
+          "label": "What gets installed",
+          "slug": "what-gets-installed"
+        },
+        {
+          "label": "Prerequisites",
+          "slug": "prerequisites"
+        },
+        {
+          "label": "Customizing",
+          "slug": "customizing"
+        },
+        {
+          "label": "Architecture",
+          "slug": "architecture-reference"
+        },
+        {
+          "label": "Troubleshooting",
+          "slug": "troubleshooting"
+        },
+        {
+          "label": "Credits",
+          "slug": "credits"
+        }
+      ]
+    },
+    {
+      "title": "Catalog",
+      "url": "/catalog/",
+      "sections": [
+        {
+          "label": "Tools",
+          "slug": "tool"
+        },
+        {
+          "label": "Agents",
+          "slug": "agent"
+        },
+        {
+          "label": "MCP servers",
+          "slug": "mcp"
+        },
+        {
+          "label": "Skills",
+          "slug": "skill"
+        },
+        {
+          "label": "Intelligence (bring your own)",
+          "slug": "intelligence"
+        }
+      ]
+    },
+    {
+      "title": "Spaces",
+      "url": "/spaces/",
+      "sections": [
+        {
+          "label": "What a Space is",
+          "slug": "what-a-space-is"
+        },
+        {
+          "label": "Make your first Space",
+          "slug": "make-your-first-space"
+        },
+        {
+          "label": "Where it can live",
+          "slug": "where-it-can-live"
+        },
+        {
+          "label": "Invite people",
+          "slug": "invite-people"
+        },
+        {
+          "label": "Give your AI access",
+          "slug": "give-your-ai-access"
+        },
+        {
+          "label": "Tools & shared memory",
+          "slug": "add-tools-and-shared-memory"
+        },
+        {
+          "label": "Share skills",
+          "slug": "share-skills"
+        },
+        {
+          "label": "See them in a window",
+          "slug": "see-your-spaces-in-a-window"
+        },
+        {
+          "label": "Everyday commands",
+          "slug": "everyday-commands"
+        },
+        {
+          "label": "Troubleshooting",
+          "slug": "troubleshooting"
+        }
+      ]
+    },
+    {
+      "code": "00",
+      "title": "Arkitype",
+      "url": "/00-arkitype/",
+      "sections": [
+        {
+          "label": "The arkitype section",
+          "slug": "the-00-arkitype-section"
+        },
+        {
+          "label": "Schema archetypes",
+          "slug": "schema-archetypes-memory-engine-vs-knowledge-engine"
+        },
+        {
+          "label": "Archetypes",
+          "slug": "archetypes"
+        },
+        {
+          "label": "Topology",
+          "slug": "topology"
+        },
+        {
+          "label": "The signal flow",
+          "slug": "the-signal-flow"
+        },
+        {
+          "label": "Round-trip editing",
+          "slug": "round-trip-editing"
+        }
+      ]
+    },
+    {
+      "code": "01",
+      "title": "Infrastructure",
+      "url": "/01-infrastructure/",
+      "sections": [
+        {
+          "label": "Git",
+          "slug": "1-git"
+        },
+        {
+          "label": "GitHub CLI",
+          "slug": "github-cli-gh"
+        },
+        {
+          "label": "Homebrew",
+          "slug": "2-homebrew-macoslinux"
+        },
+        {
+          "label": "Go",
+          "slug": "3-go"
+        },
+        {
+          "label": "Python",
+          "slug": "4-python-via-pyenv"
+        },
+        {
+          "label": "Node.js",
+          "slug": "5-nvm-nodejs"
+        },
+        {
+          "label": "VS Code",
+          "slug": "6-visual-studio-code"
+        },
+        {
+          "label": "Docker",
+          "slug": "7-docker-docker-compose"
+        },
+        {
+          "label": ".NET SDK",
+          "slug": "8-net-sdk"
+        },
+        {
+          "label": "Tailscale",
+          "slug": "9-tailscale-private-mesh-network"
+        },
+        {
+          "label": "ngrok",
+          "slug": "10-ngrok-instant-public-tunnels"
+        },
+        {
+          "label": "Verify",
+          "slug": "verify-the-layer"
+        }
+      ]
+    },
+    {
+      "code": "02",
+      "title": "Database",
+      "url": "/02-database/",
+      "sections": [
+        {
+          "label": "Workspace layout",
+          "slug": "workspace-layout"
+        },
+        {
+          "label": "rclone",
+          "slug": "1-rclone-the-sync-backbone"
+        },
+        {
+          "label": "AWS CLI / s3cmd / s5cmd",
+          "slug": "2-aws-cli-v2-s3cmd-s5cmd"
+        },
+        {
+          "label": "MinIO",
+          "slug": "3-minio-your-own-s3-optional-but-sovereign"
+        },
+        {
+          "label": "Postgres + pgvector",
+          "slug": "4-postgresql-pgvector-optional"
+        },
+        {
+          "label": "Mongo + Meilisearch",
+          "slug": "5-mongodb-meilisearch-bundled-with-librechat"
+        },
+        {
+          "label": "SQLite",
+          "slug": "6-sqlite-the-quiet-default"
+        },
+        {
+          "label": "Verify",
+          "slug": "verify-the-layer"
+        }
+      ]
+    },
+    {
+      "code": "03",
+      "title": "Software",
+      "url": "/03-software/",
+      "sections": [
+        {
+          "label": "Local models (Ollama)",
+          "slug": "local-models"
+        },
+        {
+          "label": "The claw family",
+          "slug": "the-claw-family-friends"
+        },
+        {
+          "label": "MCP servers & MCPHub",
+          "slug": "mcp-servers-one-hub-four-locals-https-out"
+        },
+        {
+          "label": "Sovrant",
+          "slug": "sovrant-post-install-command-center"
+        },
+        {
+          "label": "Verify",
+          "slug": "verify-the-layer"
+        }
+      ]
+    },
+    {
+      "code": "04",
+      "title": "Interface",
+      "url": "/04-interface/",
+      "sections": [
+        {
+          "label": "LibreChat",
+          "slug": "1-librechat-multi-model-chat-ui"
+        },
+        {
+          "label": "n8n",
+          "slug": "2-n8n-workflow-automation"
+        },
+        {
+          "label": "MCPHub dashboard",
+          "slug": "3-mcphub-dashboard"
+        },
+        {
+          "label": "Reverse proxy",
+          "slug": "4-reverse-proxy-optional-one-hostname-for-everything"
+        },
+        {
+          "label": "Sharing (HTTPS out)",
+          "slug": "5-sharing-from-your-home-lab"
+        },
+        {
+          "label": "Sovrant UX contract",
+          "slug": "6-sovrant-ux-contract-claude-like-ergonomics-current-palette"
+        },
+        {
+          "label": "Study-hall checklist",
+          "slug": "7-study-hall-checklist"
+        }
+      ]
+    },
+    {
+      "title": "Downloads",
+      "url": "/install.sh",
+      "sections": [
+        {
+          "label": "install.sh (Linux/macOS/WSL2)",
+          "href": "/install.sh"
+        },
+        {
+          "label": "install.ps1 (Windows)",
+          "href": "/install.ps1"
+        },
+        {
+          "label": "tekt.catalog.yaml (pins)",
+          "href": "/tekt.catalog.yaml"
+        },
+        {
+          "label": "Changelog",
+          "href": "/changelog/"
+        }
+      ]
+    }
   ]
 }
