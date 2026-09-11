@@ -13,10 +13,11 @@
 # Supported: macOS (Intel + Apple Silicon), Ubuntu/Debian, Fedora/RHEL, WSL2
 # Usage:     curl -fsSL https://tekt.md/install.sh | bash
 #            — or —
-#            bash install.sh [status|catalog|mcp|ui|share|space|cli|help]
+#            bash install.sh [status|catalog|catalog plan|mcp|ui|share|space|cli|help]
 # Spaces:    tekt space add team drive   — share a folder with your AI and your
 #            people through Google Drive, OneDrive, Dropbox, Box, Nextcloud or a NAS
-# Catalog:   version pins live in tekt.catalog.yaml (same directory)
+# Catalog:   tekt.catalog.yaml (same directory) holds the version pins and the
+#            install/detect data this script installs from — see catalog_rows()
 # =============================================================================
 
 set -euo pipefail
@@ -69,19 +70,78 @@ TEKT_AGENTS_DIR="$TEKT_INSTANCE/agents"
 TEKT_SPACES="${TEKT_SPACES:-$TEKT_HOME/Spaces}"   # shared folders (tekt space …)
 TEKT_BIN="${TEKT_BIN:-$HOME/.local/bin/tekt}"     # the tekt command
 
+# ── Catalog reader (no dependencies: awk only) ────────────────────────────────
+# tekt.catalog.yaml is the source of truth. Two readers, both plain awk so the
+# zero-prerequisite `curl | bash` bootstrap keeps working:
+#   catalog_pin_rows   — KEY=VALUE for every entry under pins:
+#   catalog_rows       — <key>\037<field>\037<value> for every tool entry under
+#                        layers:, using the install schema documented in the
+#                        catalog. Flat 8-space scalars only; nested maps and
+#                        folded blocks under an entry are ignored.
+catalog_pin_rows() {
+  awk '
+    function unquote(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s)
+                          if (s ~ /^".*"/) { sub(/^"/, "", s); sub(/".*$/, "", s) }
+                          else { sub(/[ \t]*#.*$/, "", s); sub(/[ \t]+$/, "", s) }
+                          return s }
+    /^pins:[ \t]*$/ { on = 1; next }
+    on && /^[^ \t#]/ { on = 0 }
+    on && /^  [A-Z][A-Z0-9_]*:/ {
+      key = $1; sub(/:$/, "", key)
+      print key "=" unquote(substr($0, index($0, ":") + 1))
+    }
+  ' "$1"
+}
+
+catalog_rows() {
+  awk -v S=$'\037' '
+    function unquote(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s)
+                          if (s ~ /^".*"$/) { s = substr(s, 2, length(s) - 2)
+                                              gsub(/\\"/, "\"", s); gsub(/\\\\/, "\\\\", s) }
+                          return s }
+    function flush() {
+      if (name == "") { n = 0; override = ""; return }
+      k = (override != "") ? override : slug
+      print k S "name" S name
+      print k S "layer" S layer
+      for (i = 1; i <= n; i++) print k S fk[i] S fv[i]
+      name = ""; n = 0; override = ""
+    }
+    /^layers:[ \t]*$/ { inlayers = 1; next }
+    inlayers && /^[^ \t#]/ { flush(); inlayers = 0 }
+    !inlayers { next }
+    /^  [A-Za-z0-9._-]+:[ \t]*$/ { flush(); layer = $1; sub(/:$/, "", layer); next }
+    /^      - name:/ {
+      flush()
+      name = unquote(substr($0, index($0, ":") + 1))
+      slug = tolower(name); gsub(/[^a-z0-9]+/, "-", slug); sub(/^-+/, "", slug); sub(/-+$/, "", slug)
+      next
+    }
+    name != "" && /^        [a-z][a-z0-9_]*:/ {
+      f = $0; sub(/^ +/, "", f); sub(/:.*$/, "", f)
+      v = unquote(substr($0, index($0, ":") + 1))
+      if (v == "" || v == ">" || v == "|") next       # nested map or folded block
+      if (f == "key") { override = v; next }
+      n++; fk[n] = f; fv[n] = v
+    }
+    END { flush() }
+  ' "$1"
+}
+
 # ── Catalog pins (tekt.catalog.yaml overrides the defaults above) ─────────────
 load_catalog_pins() {
   # Works when run from a checkout; silently skipped under `curl | bash`.
-  local script_dir catalog
+  local script_dir catalog row key val
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-.}")" 2>/dev/null && pwd)" || return 0
   catalog="${TEKT_CATALOG:-$script_dir/tekt.catalog.yaml}"
   [ -f "$catalog" ] || return 0
-  local key val
-  for key in GO_VERSION PYTHON_VERSION NODE_VERSION NVM_VERSION DOTNET_CHANNEL MCPHUB_IMAGE N8N_IMAGE RCLONEVIEW_LINUX_VERSION; do
-    val="$(grep -E "^[[:space:]]{2}${key}:" "$catalog" 2>/dev/null | head -1 \
-           | sed -E 's/^[^:]+:[[:space:]]*"?([^"#]*[^"# ])"?.*$/\1/')"
-    [ -n "$val" ] && eval "${key}=\"\$val\""
-  done
+  while IFS= read -r row; do
+    key="${row%%=*}"; val="${row#*=}"
+    [ -n "$val" ] || continue
+    case " GO_VERSION PYTHON_VERSION NODE_VERSION NVM_VERSION DOTNET_CHANNEL MCPHUB_IMAGE N8N_IMAGE RCLONEVIEW_LINUX_VERSION " in
+      *" $key "*) eval "${key}=\"\$val\"" ;;
+    esac
+  done < <(catalog_pin_rows "$catalog" 2>/dev/null)
   log "Loaded version pins from $(basename "$catalog")"
 }
 load_catalog_pins || true
@@ -180,6 +240,170 @@ ensure_local_bin() {
   mkdir -p "$HOME/.local/bin"
   append_to_shell_profile 'export PATH="$HOME/.local/bin:$PATH"'
   export PATH="$HOME/.local/bin:$PATH"
+}
+
+# =============================================================================
+# Catalog-driven installs
+# =============================================================================
+# One loop for every tool the catalog marks `managed: catalog`, in catalog
+# order, layer by layer. Each entry brings its own detection command, its own
+# install command per platform, and its own next-step line — so adding a tool
+# is a catalog edit, not a new function here.
+#
+# Everything the hand-written functions guarantee is preserved: the detection
+# command is the idempotency check (nothing is reinstalled), a failing install
+# warns and the run continues, reload_path runs between install and
+# verification, and a tool that is still missing afterwards gets its fallback
+# command (install_alt) before it is reported as failed.
+#
+# Entries left at `managed: script` keep running through their install_*
+# function below, so the migration is per-tool and reversible.
+CATALOG_FILE=""
+CATALOG_ROWS=""
+
+catalog_init() {
+  local f
+  f="$(tekt_catalog_file 2>/dev/null)" || return 1
+  [ -n "$f" ] || return 1
+  CATALOG_ROWS="$(catalog_rows "$f" 2>/dev/null)" || return 1
+  [ -n "$CATALOG_ROWS" ] || return 1
+  CATALOG_FILE="$f"
+}
+
+catalog_field() {   # catalog_field <key> <field>
+  [ -n "$CATALOG_ROWS" ] || return 0
+  printf '%s\n' "$CATALOG_ROWS" \
+    | awk -F'\037' -v k="$1" -v f="$2" '$1 == k && $2 == f { print $3; exit }'
+}
+
+catalog_layer_keys() {   # catalog_layer_keys <layer> — in catalog order
+  [ -n "$CATALOG_ROWS" ] || return 0
+  printf '%s\n' "$CATALOG_ROWS" \
+    | awk -F'\037' -v l="$1" '$2 == "layer" && $3 == l { print $1 }'
+}
+
+catalog_managed_keys() {
+  [ -n "$CATALOG_ROWS" ] || return 0
+  printf '%s\n' "$CATALOG_ROWS" \
+    | awk -F'\037' '$2 == "managed" && $3 == "catalog" { print $1 }'
+}
+
+catalog_is_managed() {   # true when this tool is installed by the loop, not by its function
+  [ -n "$CATALOG_ROWS" ] || return 1
+  [ "$(catalog_field "$1" managed)" = "catalog" ]
+}
+
+catalog_value() {   # catalog_value <key> <field> — platform override first
+  local v
+  v="$(catalog_field "$1" "${2}_$(os_type)")"
+  [ -n "$v" ] || v="$(catalog_field "$1" "$2")"
+  printf '%s' "$v"
+}
+
+catalog_expand() { local p="$1"; p="${p/#\~/$HOME}"; printf '%s' "${p//\$HOME/$HOME}"; }
+
+catalog_detected() {   # the entry's own idempotency check
+  local detect
+  detect="$(catalog_value "$1" detect)"
+  [ -n "$detect" ] || detect="cmd:$(catalog_field "$1" cmd)"
+  case "$detect" in
+    cmd:)               return 1 ;;
+    cmd:*)              command_exists "${detect#cmd:}" ;;
+    path:*)             [ -e "$(catalog_expand "${detect#path:}")" ] ;;
+    app:claude-desktop) claude_desktop_installed ;;
+    *)                  return 1 ;;
+  esac
+}
+
+catalog_supported() {   # platforms: [macos, linux, windows] — empty means everywhere
+  local plats; plats="$(catalog_field "$1" platforms)"
+  [ -n "$plats" ] || return 0
+  printf '%s' "$plats" | tr -d '[]" ' | tr ',' '\n' | grep -qx "$(os_type)"
+}
+
+catalog_install_one() {   # catalog_install_one <key>
+  local key="$1" name cmdline alt req post
+  name="$(catalog_field "$key" name)"; [ -n "$name" ] || name="$key"
+  section "$name"
+
+  if ! catalog_supported "$key"; then
+    log "$name has no install for $(os_type) — skipping."
+    return 0
+  fi
+  if catalog_detected "$key"; then
+    success "$name already installed"
+    return 0
+  fi
+
+  req="$(catalog_value "$key" requires)"
+  if [ -n "$req" ] && ! command_exists "$req"; then
+    warn "$name needs $req. Install it first, then run this again."
+    return 1
+  fi
+
+  cmdline="$(catalog_value "$key" install)"
+  if [ -z "$cmdline" ]; then
+    warn "The catalog has no install command for $name on $(os_type)."
+    return 1
+  fi
+
+  log "Installing $name — $cmdline"
+  bash -c "$cmdline" </dev/null || warn "$name installer exited non-zero — checking anyway..."
+  reload_path
+
+  if ! catalog_detected "$key"; then
+    alt="$(catalog_value "$key" install_alt)"
+    if [ -n "$alt" ]; then
+      log "Trying the fallback — $alt"
+      bash -c "$alt" </dev/null || true
+      reload_path
+    fi
+  fi
+
+  if catalog_detected "$key"; then
+    success "$name installed"
+    post="$(catalog_field "$key" post_install)"
+    [ -n "$post" ] && log "$post"
+    return 0
+  fi
+  warn "$name didn't install. Try by hand: $cmdline"
+  return 1
+}
+
+catalog_plan() {   # what the catalog-driven loop would do on this computer
+  section "Catalog plan — $(os_type)"
+  if ! catalog_init; then error "Couldn't read the catalog. Check your connection and try again."; return 1; fi
+  log "$CATALOG_FILE"
+  local layer key managed state cmdline
+  for layer in $(printf '%s\n' "$CATALOG_ROWS" | awk -F'\037' '$2 == "layer" { print $3 }' | awk '!seen[$0]++'); do
+    echo -e "\n  ${BOLD}$layer${RESET}"
+    while IFS= read -r key; do
+      [ -n "$key" ] || continue
+      managed="$(catalog_field "$key" managed)"; [ -n "$managed" ] || managed="-"
+      if [ -z "$(catalog_value "$key" detect)$(catalog_field "$key" cmd)" ]; then state="-"
+      elif ! catalog_supported "$key"; then state="n/a here"
+      elif catalog_detected "$key"; then state="installed"
+      else state="missing"; fi
+      cmdline="$(catalog_value "$key" install)"
+      [ -n "$cmdline" ] || cmdline="$(catalog_value "$key" install_steps)"
+      printf "  %-18s %-9s %-9s %s\n" "$key" "$managed" "$state" "${cmdline:0:64}"
+    done < <(catalog_layer_keys "$layer")
+  done
+  echo ""
+  log "managed=catalog runs from this data; managed=script still runs its install_* function."
+}
+
+catalog_install_layer() {   # catalog_install_layer <layer>
+  [ -n "$CATALOG_ROWS" ] || return 0
+  local keys=() key
+  while IFS= read -r key; do
+    [ -n "$key" ] || continue
+    catalog_is_managed "$key" && keys+=("$key")
+  done < <(catalog_layer_keys "$1")
+  [ "${#keys[@]}" -gt 0 ] || return 0
+  for key in "${keys[@]}"; do
+    catalog_install_one "$key" || warn "$(catalog_field "$key" name) install failed — continuing..."
+  done
 }
 
 # =============================================================================
@@ -2561,8 +2785,10 @@ Share with your AI and your people
 
 Set up and check
   install        Install all Tekt tools (what the one-line installer runs)
+  install <tool> Install one tool from the catalog (see: catalog plan)
   status         Check which tools are installed
   catalog        Print the tool catalog (tekt.catalog.yaml)
+  catalog plan   What the catalog would install on this computer, layer by layer
   mcp            Bring up MCPHub + the curated MCP servers (:3000)
   ui             Bring up LibreChat (:3080) and n8n (:5678)
   share [port]   HTTPS-expose a local port (Tailscale Serve, else ngrok)
@@ -2884,10 +3110,20 @@ main() {
   # Ensure ~/.local/bin exists and is in PATH early — PicoClaw and Hermes install here
   ensure_local_bin
 
+  # The catalog drives every entry marked `managed: catalog`; the rest still run
+  # through their install_* function below. Under `curl | bash` the catalog is
+  # fetched from tekt.md, and if it can't be read the functions cover everything.
+  if catalog_init; then
+    log "Catalog: $CATALOG_FILE — $(catalog_managed_keys | tr '\n' ' ')installed from catalog data"
+  else
+    warn "Catalog not readable — installing with the built-in steps only."
+  fi
+
   # Each install is wrapped with || true so a single failure doesn't kill the script.
   # The summary at the end shows what succeeded and what didn't.
 
   # ── Tekt.Dev ──
+  catalog_install_layer tekt.dev
   install_git           || warn "Git install failed — continuing..."
   install_homebrew      || warn "Homebrew install failed — continuing..."
   install_gh            || warn "GitHub CLI install failed — continuing..."
@@ -2899,18 +3135,21 @@ main() {
   install_docker        || warn "Docker install failed — continuing..."
 
   # ── Tekt.Base ──
+  catalog_install_layer tekt.base
   install_rclone        || warn "rclone install failed — continuing..."
   install_s3_tools      || warn "S3 tools install failed — continuing..."
   install_tekt_cli      || warn "tekt command install failed — continuing..."
   install_rcloneview    || warn "RcloneView install skipped — continuing..."
 
   # ── Tekt.Edge ──
+  catalog_install_layer tekt.edge
   install_tailscale     || warn "Tailscale install failed — continuing..."
   install_ngrok         || warn "ngrok install failed — continuing..."
 
   # ── Tekt.Iris ──
+  catalog_install_layer tekt.iris
   install_ollama        || warn "Ollama install failed — continuing..."
-  install_claude_code   || warn "Claude Code install failed — continuing..."
+  catalog_is_managed claude-code || install_claude_code || warn "Claude Code install failed — continuing..."
   install_claude_desktop || warn "Claude Desktop install skipped — continuing..."
   install_zed_agent     || warn "Zed install failed — continuing..."
   install_openclaw      || warn "OpenClaw install failed — continuing..."
@@ -2920,12 +3159,13 @@ main() {
   install_nanobot       || warn "Nanobot install failed — continuing..."
   install_nanoclaw      || warn "NanoClaw staging failed — continuing..."
   install_codex         || warn "Codex CLI install failed — continuing..."
-  install_opencode      || warn "opencode install failed — continuing..."
-  install_crush         || warn "crush install failed — continuing..."
-  install_pi            || warn "pi install failed — continuing..."
-  install_omp           || warn "omp install failed — continuing..."
+  catalog_is_managed opencode || install_opencode || warn "opencode install failed — continuing..."
+  catalog_is_managed crush    || install_crush    || warn "crush install failed — continuing..."
+  catalog_is_managed pi       || install_pi       || warn "pi install failed — continuing..."
+  catalog_is_managed omp      || install_omp      || warn "omp install failed — continuing..."
 
   # ── Tekt.Cloud (staged — start with `install.sh mcp` / `install.sh ui`) ──
+  catalog_install_layer tekt.cloud
   install_dotnet        || warn ".NET SDK install skipped — continuing..."
   install_sovrant       || warn "Sovrant install skipped — continuing..."
 
@@ -2940,13 +3180,17 @@ case "${1:-}" in
     tekt_status
     ;;
   catalog)
-    # Print the tool catalog (local checkout first, then tekt.md)
-    _cat="$(cd "$(dirname "${BASH_SOURCE[0]:-.}")" 2>/dev/null && pwd)/tekt.catalog.yaml"
-    if [ -f "$_cat" ]; then
-      cat "$_cat"
+    if [ "${2:-}" = "plan" ]; then
+      catalog_plan
     else
-      curl -fsSL https://tekt.md/tekt.catalog.yaml 2>/dev/null \
-        || error "Catalog not found locally or at https://tekt.md/tekt.catalog.yaml"
+      # Print the tool catalog (local checkout first, then tekt.md)
+      _cat="$(cd "$(dirname "${BASH_SOURCE[0]:-.}")" 2>/dev/null && pwd)/tekt.catalog.yaml"
+      if [ -f "$_cat" ]; then
+        cat "$_cat"
+      else
+        curl -fsSL https://tekt.md/tekt.catalog.yaml 2>/dev/null \
+          || error "Catalog not found locally or at https://tekt.md/tekt.catalog.yaml"
+      fi
     fi
     ;;
   mcp)
@@ -3005,7 +3249,22 @@ case "${1:-}" in
     esac
     ;;
   install)
-    main
+    if [ -n "${2:-}" ]; then
+      # install one tool from the catalog: tekt install <tool>
+      if ! catalog_init; then error "Couldn't read the catalog. Check your connection and try again."; exit 1; fi
+      if [ -z "$(catalog_field "$2" name)" ]; then
+        error "'$2' isn't in the catalog. See:  $(basename "$0") catalog plan"
+        exit 1
+      fi
+      if ! catalog_is_managed "$2"; then
+        error "'$2' is installed by $(basename "$0")'s $(catalog_field "$2" installer) step, not from catalog data."
+        exit 1
+      fi
+      ensure_local_bin
+      catalog_install_one "$2"
+    else
+      main
+    fi
     ;;
   help|--help|-h)
     tekt_help

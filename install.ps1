@@ -103,16 +103,75 @@ $TektResults   = [System.Collections.Generic.List[object]]::new()   # winget ins
 $EmDash        = [string][char]0x2014   # built from char codes so the file parses the same under any encoding
 $MidDot        = [string][char]0x00B7
 
+# -- Catalog reader (no YAML module, no other prerequisite) --------------------
+# tekt.catalog.yaml is the source of truth: it holds the version pins and the
+# install/detect data for every tool. Two readers, both plain line parsing so
+# `irm | iex` still needs nothing installed first:
+#   Get-CatalogPins   - every KEY: value under pins:
+#   Get-CatalogInstallEntries  - every tool entry under layers:, as { Key, Name, Layer,
+#                       Fields }, following the install schema documented in the
+#                       catalog. Flat 8-space scalars only, so nested maps and
+#                       folded blocks under an entry are ignored.
+function Convert-CatalogScalar($raw) {
+    $v = ([string]$raw).Trim()
+    if ($v -match '^"(.*)"$') { return $Matches[1].Replace('\"', '"').Replace('\\', '\') }
+    $v = ($v -replace '\s+#.*$', '').Trim()
+    return $v
+}
+
+function Get-CatalogPins($file) {
+    $pins = @{}
+    $on = $false
+    foreach ($line in [IO.File]::ReadAllLines($file)) {
+        if (-not $on) { if ($line -match '^pins:\s*$') { $on = $true }; continue }
+        if ($line -match '^[^\s#]') { break }
+        if ($line -match '^  ([A-Z][A-Z0-9_]*):(.*)$') { $pins[$Matches[1]] = Convert-CatalogScalar $Matches[2] }
+    }
+    return $pins
+}
+
+function Add-CatalogEntry($tools, $cur) {
+    if (-not $cur) { return }
+    if (-not $cur.Key) { $cur.Key = ($cur.Name.ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim('-') }
+    $tools.Add([pscustomobject]$cur)
+}
+
+function Get-CatalogInstallEntries($file) {
+    $tools = [System.Collections.Generic.List[object]]::new()
+    $on = $false; $layer = ""; $cur = $null
+    foreach ($line in [IO.File]::ReadAllLines($file)) {
+        if (-not $on) { if ($line -match '^layers:\s*$') { $on = $true }; continue }
+        if ($line -match '^[^\s#]') { Add-CatalogEntry $tools $cur; $cur = $null; break }
+        if ($line -match '^  ([A-Za-z0-9._-]+):\s*$') {
+            Add-CatalogEntry $tools $cur; $cur = $null
+            $layer = $Matches[1]
+            continue
+        }
+        if ($line -match '^      - name:(.*)$') {
+            Add-CatalogEntry $tools $cur
+            $cur = @{ Name = (Convert-CatalogScalar $Matches[1]); Key = ""; Layer = $layer; Fields = @{} }
+            continue
+        }
+        if ($cur -and $line -match '^        ([a-z][a-z0-9_]*):(.*)$') {
+            $field = $Matches[1]; $value = Convert-CatalogScalar $Matches[2]
+            if ($value -eq "" -or $value -eq ">" -or $value -eq "|") { continue }   # nested map or folded block
+            if ($field -eq "key") { $cur.Key = $value } else { $cur.Fields[$field] = $value }
+        }
+    }
+    Add-CatalogEntry $tools $cur
+    return $tools
+}
+
 # -- Catalog pins (tekt.catalog.yaml next to this script, if present) ----------
 $McpHubImage = "samanhappy/mcphub:latest"
 $N8nImage    = "docker.n8n.io/n8nio/n8n:latest"
 $RcloneViewWinVersion = "1.5.32"   # winget's Bdrive.RcloneView is stale, so Tekt pins the official installer
 $catalogPath = Join-Path $PSScriptRoot "tekt.catalog.yaml"
 if (Test-Path $catalogPath) {
-    $cat = Get-Content $catalogPath -Raw
-    if ($cat -match 'MCPHUB_IMAGE:\s*"([^"]+)"') { $McpHubImage = $Matches[1] }
-    if ($cat -match 'N8N_IMAGE:\s*"([^"]+)"')    { $N8nImage    = $Matches[1] }
-    if ($cat -match 'RCLONEVIEW_WINDOWS_VERSION:\s*"([^"]+)"') { $RcloneViewWinVersion = $Matches[1] }
+    $pins = Get-CatalogPins $catalogPath
+    if ($pins["MCPHUB_IMAGE"])              { $McpHubImage          = $pins["MCPHUB_IMAGE"] }
+    if ($pins["N8N_IMAGE"])                 { $N8nImage             = $pins["N8N_IMAGE"] }
+    if ($pins["RCLONEVIEW_WINDOWS_VERSION"]){ $RcloneViewWinVersion = $pins["RCLONEVIEW_WINDOWS_VERSION"] }
     Log "Loaded version pins from tekt.catalog.yaml"
 }
 
@@ -211,6 +270,158 @@ function Write-InstallSummary {
     if ($wait.Count -gt 0) {
         Log "Open a new PowerShell window to start using: $(($wait | ForEach-Object { $_.Label }) -join ', ')"
     }
+}
+
+# -- Catalog-driven installs ----------------------------------------------------
+# One loop for every entry the catalog marks `managed: catalog`, in catalog
+# order, layer by layer. Each entry brings its own detection command and its own
+# Windows install command, so adding a tool is a catalog edit, not a new
+# function here. Entries left at `managed: script` keep running through their
+# Install-* function below, so the migration is per-tool and reversible.
+#
+# The behaviours the hand-written functions guarantee are kept: the detection
+# command is the idempotency check, "winget:<Package.Id>" goes through
+# Install-Winget so winget's exit codes are judged the same way, PATH is
+# refreshed before verifying, a tool that installed cleanly but isn't visible
+# yet is reported as Pending (not failed), and nothing throws - every result
+# lands in the summary.
+$CatalogFile  = $null
+$CatalogTools = @()
+
+function Initialize-Catalog {
+    $file = Get-TektCatalogFile
+    if (-not $file) { return $false }
+    $tools = @(Get-CatalogInstallEntries $file)
+    if ($tools.Count -eq 0) { return $false }
+    $script:CatalogFile  = $file
+    $script:CatalogTools = $tools
+    return $true
+}
+
+function Get-CatalogEntry($key) {
+    return @($CatalogTools | Where-Object { $_.Key -eq $key }) | Select-Object -First 1
+}
+
+function Get-CatalogField($tool, $field) {   # Windows override first, then the shared value
+    if (-not $tool) { return "" }
+    foreach ($name in @("${field}_windows", $field)) {
+        if ($tool.Fields.ContainsKey($name) -and $tool.Fields[$name]) { return [string]$tool.Fields[$name] }
+    }
+    return ""
+}
+
+function Test-CatalogManaged($tool) { (Get-CatalogField $tool "managed") -eq "catalog" }
+
+function Test-CatalogPlatform($tool) {
+    $plats = Get-CatalogField $tool "platforms"
+    if (-not $plats) { return $true }
+    return ($plats -replace '[\[\]" ]', '') -split ',' -contains "windows"
+}
+
+function Test-CatalogDetect($tool) {
+    $detect = Get-CatalogField $tool "detect"
+    if (-not $detect) {
+        $cmd = Get-CatalogField $tool "cmd"
+        if (-not $cmd) { return $false }
+        $detect = "cmd:$cmd"
+    }
+    switch -Regex ($detect) {
+        '^cmd:(.+)$'         { return (Test-Cmd $Matches[1]) }
+        '^path:(.+)$'        { return (Test-Path -LiteralPath ([Environment]::ExpandEnvironmentVariables(($Matches[1] -replace '^~', $HOME)))) }
+        '^app:claude-desktop$' { return (Test-ClaudeDesktop) }
+        default              { return $false }
+    }
+}
+
+# Official installers are written for an interactive window and some of them
+# call `exit`, so each one runs in its own PowerShell process (the same trick
+# Install-Codex and Install-Omp use) and is judged by its exit code.
+function Invoke-CatalogCommand($command) {
+    $ps = if (Test-Cmd "pwsh") { "pwsh" } else { "powershell" }
+    & $ps -NoProfile -ExecutionPolicy Bypass -Command $command
+    return $LASTEXITCODE
+}
+
+function Install-CatalogEntry($tool) {
+    $label = if ($tool.Name) { $tool.Name } else { $tool.Key }
+    $cmd   = Get-CatalogField $tool "cmd"
+    $install = Get-CatalogField $tool "install"
+
+    if (-not (Test-CatalogPlatform $tool)) { Section $label; Log "$label has no Windows install - skipping."; return }
+
+    # winget entries go through Install-Winget, which owns the exit-code and Pending reporting
+    if ($install -match '^winget:(.+)$') { Install-Winget $label $Matches[1] $cmd; return }
+
+    Section $label
+    if (Test-CatalogDetect $tool) { Success "$label already installed"; Add-InstallResult $label $true; return }
+
+    $needs = Get-CatalogField $tool "requires"
+    if ($needs -and -not (Test-Cmd $needs)) {
+        Warn "$label needs $needs. Install it first, then run .\install.ps1 again."
+        Add-InstallResult $label $false
+        return
+    }
+    if (-not $install) {
+        Warn "The catalog has no Windows install command for $label."
+        Add-InstallResult $label $false
+        return
+    }
+
+    Log "Installing $label - $install"
+    $code = Invoke-CatalogCommand $install
+    Refresh-SessionPath
+
+    if (-not (Test-CatalogDetect $tool)) {
+        $alt = Get-CatalogField $tool "install_alt"
+        if ($alt) {
+            Log "Trying the fallback - $alt"
+            $code = Invoke-CatalogCommand $alt
+            Refresh-SessionPath
+        }
+    }
+
+    if (Test-CatalogDetect $tool) {
+        Success "$label installed"
+        $post = Get-CatalogField $tool "post_install"
+        if ($post) { Log $post }
+        Add-InstallResult $label $true
+    } elseif ($code -eq 0) {
+        # installed cleanly; Windows often only exposes the new command in a fresh window
+        Warn "$label installed, but '$cmd' isn't available in this window yet. Open a new PowerShell window, then run .\install.ps1 status"
+        Add-InstallResult $label $true -Pending
+    } else {
+        Warn "$label didn't install (exit code $code). Try by hand: $install"
+        Add-InstallResult $label $false
+    }
+}
+
+function Install-CatalogLayer($layer) {
+    foreach ($tool in @($CatalogTools | Where-Object { $_.Layer -eq $layer -and (Test-CatalogManaged $_) })) {
+        Install-CatalogEntry $tool
+    }
+}
+
+function Show-CatalogPlan {
+    Section "Catalog plan - windows"
+    if (-not (Initialize-Catalog)) { Err "Couldn't read the catalog. Check your connection and try again."; return }
+    Log $CatalogFile
+    foreach ($layer in @($CatalogTools | ForEach-Object { $_.Layer } | Select-Object -Unique)) {
+        Write-Host "`n  $layer"
+        foreach ($tool in @($CatalogTools | Where-Object { $_.Layer -eq $layer })) {
+            $managed = Get-CatalogField $tool "managed"
+            if (-not $managed) { $managed = "-" }
+            $state = if (-not ((Get-CatalogField $tool "detect") -or (Get-CatalogField $tool "cmd"))) { "-" }
+                     elseif (-not (Test-CatalogPlatform $tool)) { "n/a here" }
+                     elseif (Test-CatalogDetect $tool) { "installed" }
+                     else { "missing" }
+            $how = Get-CatalogField $tool "install"
+            if (-not $how) { $how = Get-CatalogField $tool "install_steps" }
+            if ($how.Length -gt 64) { $how = $how.Substring(0, 64) }
+            Write-Host ("  {0,-18} {1,-9} {2,-9} {3}" -f $tool.Key, $managed, $state, $how)
+        }
+    }
+    Write-Host ""
+    Log "managed=catalog runs from this data; managed=script still runs its Install-* function."
 }
 
 # -- Native installers ----------------------------------------------------------
@@ -2167,7 +2378,18 @@ function Main {
     $TektResults.Clear()
     Test-WingetSources
 
+    # The catalog installs every entry marked `managed: catalog`; the rest still
+    # run through their Install-* function below. Under `irm | iex` the catalog
+    # comes from tekt.md, and if it can't be read the functions cover everything.
+    if (Initialize-Catalog) {
+        $fromCatalog = @($CatalogTools | Where-Object { Test-CatalogManaged $_ } | ForEach-Object { $_.Key })
+        Log "Catalog: $CatalogFile - $($fromCatalog -join ', ') installed from catalog data"
+    } else {
+        Warn "Catalog not readable - installing with the built-in steps only."
+    }
+
     # Tekt.Dev
+    Install-CatalogLayer "tekt.dev"
     Install-Winget "Git"            "Git.Git"                    "git"
     Install-Winget "GitHub CLI"     "GitHub.cli"                 "gh"
     Install-Winget "Go"             "GoLang.Go"                  "go"
@@ -2177,16 +2399,19 @@ function Main {
     Install-Winget "Docker Desktop" "Docker.DockerDesktop"       "docker"
     Install-Winget ".NET 10 SDK"    "Microsoft.DotNet.SDK.10"    "dotnet"
     # Tekt.Base
+    Install-CatalogLayer "tekt.base"
     Install-Winget "rclone"         "Rclone.Rclone"              "rclone"
     Install-Winget "AWS CLI"        "Amazon.AWSCLI"              "aws"
     Install-TektCli
     Install-RcloneView
     # Tekt.Edge
+    Install-CatalogLayer "tekt.edge"
     Install-Winget "Tailscale"      "tailscale.tailscale"        "tailscale"
     Install-Winget "ngrok"          "Ngrok.Ngrok"                "ngrok"
     # Tekt.Iris
+    Install-CatalogLayer "tekt.iris"
     Install-Winget "Ollama"         "Ollama.Ollama"              "ollama"
-    Install-ClaudeCode
+    if (-not (Test-CatalogManaged (Get-CatalogEntry "claude-code"))) { Install-ClaudeCode }
     Install-ClaudeDesktop
     Install-ZedAgent
     Install-OpenClaw
@@ -2195,13 +2420,14 @@ function Main {
     Install-Nanobot
     Install-NanoClaw
     Install-Codex
-    Install-OpenCode
-    Install-Crush
-    Install-Pi
-    Install-Omp
+    if (-not (Test-CatalogManaged (Get-CatalogEntry "opencode"))) { Install-OpenCode }
+    if (-not (Test-CatalogManaged (Get-CatalogEntry "crush")))    { Install-Crush }
+    if (-not (Test-CatalogManaged (Get-CatalogEntry "pi")))       { Install-Pi }
+    if (-not (Test-CatalogManaged (Get-CatalogEntry "omp")))      { Install-Omp }
     Section "Hermes Agent"
     Warn "Hermes has no native Windows build - use WSL2: wsl --install, then bash install.sh"
     # Tekt.Cloud
+    Install-CatalogLayer "tekt.cloud"
     Install-Sovrant
 
     Write-Host ""
@@ -2255,6 +2481,8 @@ switch ($Command) {
         Write-Host "Usage: .\install.ps1 [status|catalog|mcp|ui|share <port>|space ...|skill ...|tool ...|connect [app]|gui|cli|help]"
         Write-Host "       (after 'cli' you can type 'tekt' instead of '.\install.ps1')"
         Write-Host "  (none)        Install all Tekt tools"
+        Write-Host "  install <tool> Install one tool from the catalog (see: catalog plan)"
+        Write-Host "  catalog plan  What the catalog would install on this computer, layer by layer"
         Write-Host "  status        Check which tools are installed"
         Write-Host "  mcp           MCPHub + curated MCP servers (:3000)"
         Write-Host "  ui            LibreChat (:3080) + n8n (:5678)"
@@ -2289,8 +2517,21 @@ switch ($Command) {
         Write-Host "Windows note: after installs, restart PowerShell, then run .\install.ps1 status"
     }
     "catalog" {
-        if (Test-Path $catalogPath) { Get-Content $catalogPath }
+        if ($Rest.Count -ge 1 -and $Rest[0] -eq "plan") { Show-CatalogPlan }
+        elseif (Test-Path $catalogPath) { Get-Content $catalogPath }
         else { irm https://tekt.md/tekt.catalog.yaml }
+    }
+    "install" {
+        # install one tool from the catalog: tekt install <tool>
+        $want = if ($Rest.Count -ge 1) { $Rest[0] } else { "" }
+        if (-not $want) { Main }
+        elseif (-not (Initialize-Catalog)) { Err "Couldn't read the catalog. Check your connection and try again." }
+        else {
+            $tool = Get-CatalogEntry $want
+            if (-not $tool) { Err "'$want' isn't in the catalog. See:  .\install.ps1 catalog plan" }
+            elseif (-not (Test-CatalogManaged $tool)) { Err "'$want' is installed by $(Get-CatalogField $tool 'installer_windows'), not from catalog data." }
+            else { Refresh-SessionPath; Install-CatalogEntry $tool }
+        }
     }
     default  { Main }
 }
