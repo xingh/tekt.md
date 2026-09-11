@@ -2,7 +2,6 @@ module.exports = function (eleventyConfig) {
   eleventyConfig.addPassthroughCopy("install.sh");
   eleventyConfig.addPassthroughCopy("install.ps1");
   eleventyConfig.addPassthroughCopy("tekt.catalog.yaml");
-  eleventyConfig.addPassthroughCopy("tekt.body.png");
   eleventyConfig.addPassthroughCopy("tekt.cover.png");
   eleventyConfig.addPassthroughCopy("tekt.roadmap.png");
   eleventyConfig.addPassthroughCopy("tekt.md.png");
