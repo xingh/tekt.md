@@ -8,6 +8,15 @@ permalink: /changelog/index.html
 
 # Changelog
 
+## v0.13.0 — PROFILE
+
+The arkitype override layer is now real (#39, xingh/arkitype#12).
+
+- **00-arkitype is the override layer.** Everything that makes this Tekt yours (name, tagline, colors, fonts, layers, navigation, install commands) lives in one `profile:` block in `00-arkitype.md`, under `profile.site`. The layers below stay standard. Clone the repo and edit only this block to get a differently branded Tekt with the same structure.
+- **`_data/site.json` is a generated mirror.** `npm run profile` writes it from the profile, every `npm run build` (including Netlify deploys) runs that first, and `npm run profile:check` fails if the two ever disagree.
+- `profile.site` is the first profile section; `agent:` and others can follow.
+- The site looks exactly the same; only the source of its settings moved.
+
 ## v0.12.0 — pi and omp
 
 - **pi** (#38): the minimal, extensible coding agent from earendil-works, installed with `npm install -g --ignore-scripts @earendil-works/pi-coding-agent` as its docs recommend.
