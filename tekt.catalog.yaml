@@ -45,6 +45,34 @@ schema_archetypes:
     write_pattern: "curated ingest + revision"
     retention: "long-lived canonical"
 
+# ── Install schema (read by install.sh / install.ps1) ─────────────────────────
+# Every entry under `layers: … tools:` may carry these structured fields. The
+# installers read them with a flat, dependency-free reader (awk in bash, regex
+# in PowerShell): only 8-space scalar keys are parsed, so nested maps and
+# folded blocks below an entry are ignored and safe to keep.
+#
+#   key                  stable id the installers use (default: slug of `name`)
+#   cmd                  the command that proves the tool is installed
+#   detect               detection override — cmd:<name> | path:<path> | app:<id>
+#   requires             command that must exist first (…_macos/_linux/_windows)
+#   install              install command, POSIX shell (…_macos/_linux/_windows)
+#                        on Windows, "winget:<Package.Id>" runs winget with
+#                        Tekt's exit-code and Pending reporting
+#   install_steps        prose, not a command: what the install_* function does
+#                        when the steps are too branchy for one line (…_macos/
+#                        _linux/_windows). Documentation only — never executed.
+#   install_alt          second attempt when the first leaves `cmd` missing
+#                        (…_windows for a PowerShell-specific fallback)
+#   platforms            [macos, linux, windows] — where it can be installed
+#   post_install         one line printed after a successful install
+#   managed              catalog = installed by the data-driven loop
+#                        script  = still installed by the function named below
+#   installer            the bash function in install.sh
+#   installer_windows    the PowerShell function in install.ps1
+#
+# Layer order the installers follow (main() groups installs this way):
+install_order: [tekt.dev, tekt.base, tekt.edge, tekt.iris, tekt.cloud]
+
 # ── Layers ────────────────────────────────────────────────────────────────────
 layers:
 
@@ -53,43 +81,116 @@ layers:
     doc: 01-infrastructure.md
     tools:
       - name: Git
+        key: git
         cmd: git
+        install_steps_macos: "Xcode Command Line Tools (xcode-select --install), which include git"
+        install_linux: "sudo apt-get install -y -q git || sudo dnf install -y git || sudo pacman -S --noconfirm git"
+        install_windows: "winget:Git.Git"
+        managed: script
+        installer: install_git
+        installer_windows: Install-Winget
         upstream: "Software Freedom Conservancy / git-scm.com"
         docs: https://git-scm.com
       - name: GitHub CLI
+        key: gh
         cmd: gh
+        install_macos: "brew install gh"
+        install_steps_linux: "distro package from cli.github.com (apt/dnf/pacman, keyring added first)"
+        install_windows: "winget:GitHub.cli"
+        managed: script
+        installer: install_gh
+        installer_windows: Install-Winget
         upstream: "GitHub — cli.github.com (MIT)"
         repo: https://github.com/cli/cli
         docs: https://cli.github.com/manual/
-        install_windows: "winget install --id GitHub.cli -e"
+        post_install: "Sign in once with: gh auth login"
         note: "Sign in once with: gh auth login"
       - name: Homebrew
+        key: homebrew
         cmd: brew
+        install: "/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+        platforms: [macos, linux]
+        managed: script
+        installer: install_homebrew
         upstream: "Homebrew maintainers — brew.sh"
         docs: https://brew.sh
+      - name: Build essentials
+        key: system-deps
+        detect: "cmd:make"
+        install_steps_linux: "distro build deps (build-essential / Development Tools / base-devel) + pyenv build libs"
+        platforms: [linux]
+        managed: script
+        installer: install_system_deps
+        upstream: "your distribution"
+        note: "Compilers and headers pyenv needs to build Python. Linux only; macOS gets them with the Xcode Command Line Tools."
       - name: Go
+        key: go
         cmd: go
+        version_pin: GO_VERSION
+        install_steps: "official tarball from go.dev/dl into /usr/local/go (pinned GO_VERSION)"
+        install_windows: "winget:GoLang.Go"
+        managed: script
+        installer: install_go
+        installer_windows: Install-Winget
         upstream: "The Go Authors — go.dev"
         docs: https://go.dev/doc/install
       - name: Python (pyenv)
+        key: python
         cmd: python3
+        version_pin: PYTHON_VERSION
+        install_steps: "curl -fsSL https://pyenv.run | bash, then pyenv install $PYTHON_VERSION"
+        install_windows: "winget:Python.Python.3.12"
+        platforms: [macos, linux, windows]
+        managed: script
+        installer: install_python
+        installer_windows: Install-Winget
         upstream: "Python Software Foundation; pyenv by Yamashita/Danhper et al."
         docs: https://github.com/pyenv/pyenv
+        note: "pyenv on macOS/Linux/WSL2; Windows uses winget (pyenv-win is not used)."
       - name: nvm / Node.js
+        key: node
         cmd: node
+        version_pin: NODE_VERSION
+        install_steps: "curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v$NVM_VERSION/install.sh | bash, then nvm install $NODE_VERSION"
+        install_windows: "winget:OpenJS.NodeJS.LTS"
+        managed: script
+        installer: install_nvm_node
+        installer_windows: Install-Winget
         upstream: "OpenJS Foundation; nvm by Jordan Harband et al."
         docs: https://github.com/nvm-sh/nvm
       - name: Visual Studio Code
+        key: vscode
         cmd: code
+        install_macos: "brew install --cask visual-studio-code"
+        install_steps_linux: "packages.microsoft.com repo (apt .sources / yum repo), then install code"
+        install_windows: "winget:Microsoft.VisualStudioCode"
+        managed: script
+        installer: install_vscode
+        installer_windows: Install-Winget
         upstream: "Microsoft"
         docs: https://code.visualstudio.com
       - name: Docker & Compose
+        key: docker
         cmd: docker
+        install_macos: "brew install --cask docker"
+        install_linux: "curl -fsSL https://get.docker.com | sudo sh"
+        install_windows: "winget:Docker.DockerDesktop"
+        managed: script
+        installer: install_docker
+        installer_windows: Install-Winget
         upstream: "Docker, Inc."
         docs: https://docs.docker.com/engine/install/
+        note: "Linux installs Docker Engine through get.docker.com and adds you to the docker group."
       - name: .NET SDK
+        key: dotnet
         cmd: dotnet
         version_pin: DOTNET_CHANNEL
+        install_macos: "brew install --cask dotnet-sdk"
+        install_linux: "curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel $DOTNET_CHANNEL"
+        install_windows: "winget:Microsoft.DotNet.SDK.10"
+        managed: script
+        installer: install_dotnet
+        installer_windows: Install-Winget
         upstream: "Microsoft — dotnet.microsoft.com (MIT)"
         docs: https://dotnet.microsoft.com/download
         note: "Required to build Sovrant from source."
@@ -99,43 +200,89 @@ layers:
     doc: 02-database.md
     tools:
       - name: rclone
+        key: rclone
         cmd: rclone
+        install: "curl https://rclone.org/install.sh | sudo bash"
+        install_windows: "winget:Rclone.Rclone"
+        managed: script
+        installer: install_rclone
+        installer_windows: Install-Winget
         upstream: "Nick Craig-Wood & contributors — rclone.org"
         docs: https://rclone.org
+      - name: tekt CLI
+        key: tekt-cli
+        detect: "path:$HOME/.local/bin/tekt"
+        detect_windows: "path:$HOME/.local/bin/tekt.ps1"
+        install_steps: "copy this script to ~/.local/bin/tekt"
+        managed: script
+        installer: install_tekt_cli
+        installer_windows: Install-TektCli
+        upstream: "Tekt — tekt.md"
+        note: "The `tekt` command itself: status, space, connect, tool, skill, mcp, ui, share."
       - name: RcloneView
+        key: rcloneview
         cmd: tekt space gui
+        detect: "path:$HOME/.local/bin/RcloneView.AppImage"
         upstream: "Bdrive Inc. — rcloneview.com"
         license: "Freemium, proprietary: core features free; RcloneView Plus adds scheduling and filters"
         docs: https://rcloneview.com
         install_macos: "brew install --cask rcloneview"
-        install_linux: "AppImage from downloads.bdrive.com (pinned RCLONEVIEW_LINUX_VERSION)"
-        install_windows: "setup exe from downloads.bdrive.com (pinned RCLONEVIEW_WINDOWS_VERSION)"
+        install_steps_linux: "AppImage from downloads.bdrive.com (pinned RCLONEVIEW_LINUX_VERSION)"
+        install_steps_windows: "setup exe from downloads.bdrive.com (pinned RCLONEVIEW_WINDOWS_VERSION)"
+        managed: script
+        installer: install_rcloneview
+        installer_windows: Install-RcloneView
         optional: true
         note: "A point-and-click window onto your storage for people who never open a terminal. Installed on desktops only."
       - name: AWS CLI v2
+        key: aws
         cmd: aws
+        install_steps_macos: "AWSCLIV2.pkg from awscli.amazonaws.com (installer -pkg)"
+        install_steps_linux: "awscli-exe-linux-<arch>.zip from awscli.amazonaws.com, then ./aws/install --update"
+        install_windows: "winget:Amazon.AWSCLI"
+        managed: script
+        installer: install_s3_tools
+        installer_windows: Install-Winget
         upstream: "Amazon Web Services"
         docs: https://docs.aws.amazon.com/cli/
       - name: s3cmd
+        key: s3cmd
         cmd: s3cmd
+        requires: pip
+        install: "pip install s3cmd"
+        platforms: [macos, linux]
+        managed: script
+        installer: install_s3_tools
         upstream: "s3tools.org"
         docs: https://s3tools.org/s3cmd
       - name: s5cmd
+        key: s5cmd
         cmd: s5cmd
+        install_macos: "brew install peak/tap/s5cmd"
+        install_linux: "go install github.com/peak/s5cmd/v2@v2.3.0"
+        platforms: [macos, linux]
+        managed: script
+        installer: install_s3_tools
         upstream: "Peak — github.com/peak/s5cmd"
         docs: https://github.com/peak/s5cmd
       - name: MinIO
+        key: minio
         runtime: docker
+        install_steps: "docker container, brought up alongside the tekt.cloud stacks"
         upstream: "MinIO, Inc. (AGPL v3)"
         docs: https://min.io/docs
         optional: true
       - name: PostgreSQL + pgvector
+        key: postgres
         runtime: docker
+        install_steps: "docker container, brought up alongside the tekt.cloud stacks"
         upstream: "PostgreSQL Global Development Group; pgvector by Andrew Kane"
         optional: true
         note: "Required for MCPHub Smart Routing (database mode)"
       - name: MongoDB + Meilisearch
+        key: mongo-meilisearch
         runtime: docker
+        install_steps: "docker containers inside the LibreChat compose stack (install.sh ui)"
         upstream: "MongoDB, Inc.; Meili SAS"
         optional: true
         note: "Bundled inside the LibreChat compose stack"
@@ -145,14 +292,29 @@ layers:
     doc: 04-interface.md
     tools:
       - name: Tailscale
+        key: tailscale
         cmd: tailscale
         upstream: "Tailscale Inc. (client is open source, BSD-3)"
         docs: https://tailscale.com/kb
+        install_macos: "brew install --cask tailscale"
         install_linux: "curl -fsSL https://tailscale.com/install.sh | sh"
+        install_windows: "winget:tailscale.tailscale"
+        managed: script
+        installer: install_tailscale
+        installer_windows: Install-Winget
+        post_install: "Join your tailnet with: sudo tailscale up"
       - name: ngrok
+        key: ngrok
         cmd: ngrok
+        install_macos: "brew install ngrok"
+        install_steps_linux: "ngrok apt repo (Debian/Ubuntu), else the official v3 tarball"
+        install_windows: "winget:Ngrok.Ngrok"
+        managed: script
+        installer: install_ngrok
+        installer_windows: Install-Winget
         upstream: "ngrok, Inc. (proprietary agent, free tier)"
         docs: https://ngrok.com/docs
+        post_install: "Connect your account with: ngrok config add-authtoken <token>"
         note: "Requires a free authtoken: ngrok config add-authtoken <token>"
 
   tekt.iris:
@@ -161,103 +323,197 @@ layers:
     default_kind: agent        # entries here sit on the Agents shelf unless they say otherwise
     tools:
       - name: Ollama
+        key: ollama
         kind: tool             # model runtime, not an agent
         cmd: ollama
         upstream: "Ollama — ollama.com (MIT)"
         docs: https://ollama.com
+        install_macos: "brew install ollama"
         install_linux: "curl -fsSL https://ollama.com/install.sh | sh"
+        install_windows: "winget:Ollama.Ollama"
+        managed: script
+        installer: install_ollama
+        installer_windows: Install-Winget
+        post_install: "Pull a first model with: ollama pull llama3.2"
       - name: Claude Code
+        key: claude-code
         cmd: claude
         upstream: "Anthropic"
         repo: https://github.com/anthropics/claude-code
         install: "curl -fsSL https://claude.ai/install.sh | bash"
         install_windows: "irm https://claude.ai/install.ps1 | iex"
+        install_alt: "npm install -g @anthropic-ai/claude-code"
+        managed: catalog
+        installer: install_claude_code
+        installer_windows: Install-ClaudeCode
+        post_install: "Start it with: claude"
       - name: Claude Desktop
+        key: claude-desktop
         runtime: desktop-app
+        detect: "app:claude-desktop"
         upstream: "Anthropic"
         docs: https://claude.ai/download
         install_macos: "brew install --cask claude"
-        install_windows: "winget install --id Anthropic.Claude -e"
-        install_linux: "Anthropic apt repo (Ubuntu 22.04+ / Debian 12+, beta): apt install claude-desktop"
+        install_windows: "winget:Anthropic.Claude"
+        install_steps_linux: "Anthropic apt repo (Ubuntu 22.04+ / Debian 12+, beta): apt install claude-desktop"
+        managed: script
+        installer: install_claude_desktop install_claude_desktop_linux
+        installer_windows: Install-ClaudeDesktop
         note: "Desktop app for Claude. On Linux it's a beta for Ubuntu and Debian; Tekt checks Anthropic's key fingerprint before adding the repo."
       - name: Zed (Agent mode)
+        key: zed
         cmd: zed
         upstream: "Zed Industries"
         docs: https://zed.dev/docs
         install_macos: "brew install --cask zed"
         install_linux: "curl -fsSL https://zed.dev/install.sh | bash"
-        install_windows: "winget install --id ZedIndustries.Zed -e"
+        install_windows: "winget:ZedIndustries.Zed"
+        managed: script
+        installer: install_zed_agent
+        installer_windows: Install-ZedAgent
         note: "Enable Agent mode in Assistant settings after install."
       - name: OpenClaw
+        key: openclaw
         cmd: openclaw
         upstream: "OpenClaw contributors"
         repo: https://github.com/openclaw/openclaw
-        install: "curl -fsSL https://openclaw.ai/install.sh | bash"
+        install: "npm install -g openclaw@latest"
+        install_alt: "curl -fsSL https://openclaw.ai/install.sh | bash"
+        requires_windows: npm
+        managed: script
+        installer: install_openclaw
+        installer_windows: Install-OpenClaw
+        post_install: "Finish setup with: openclaw onboard --install-daemon"
         note: "Bootstrap defers interactive onboarding; run openclaw onboard --install-daemon manually."
       - name: PicoClaw
+        key: picoclaw
         cmd: picoclaw
         upstream: "Sipeed"
         repo: https://github.com/sipeed/picoclaw
+        install_steps: "picoclaw-<os>-<arch> release binary from github.com/sipeed/picoclaw, else a source build"
+        install_steps_windows: "picoclaw-windows-amd64.exe release binary into ~\\.local\\bin"
+        managed: script
+        installer: install_picoclaw
+        installer_windows: Install-PicoClaw
+        post_install: "Run 'picoclaw onboard' to complete setup."
       - name: Hermes Agent
+        key: hermes
         cmd: hermes
         upstream: "Nous Research"
         repo: https://github.com/NousResearch/hermes-agent
+        install: "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"
+        platforms: [macos, linux]
+        managed: script
+        installer: install_hermes
+        post_install: "Run 'hermes setup' to configure your provider."
         note: "Linux/macOS/WSL2 only — no native Windows"
       - name: ZeroClaw
+        key: zeroclaw
         cmd: zeroclaw
         upstream: "zeroclaw-labs contributors (Rust)"
         repo: https://github.com/zeroclaw-labs/zeroclaw
         install: "curl -fsSL https://raw.githubusercontent.com/zeroclaw-labs/zeroclaw/master/install.sh | bash"
+        install_alt: "brew install zeroclaw"
+        platforms: [macos, linux]
+        managed: script
+        installer: install_zeroclaw
+        installer_windows: Install-ZeroClaw
+        post_install: "Run 'zeroclaw quickstart' to configure a provider."
+        note: "Windows has no installer yet — take the x86_64 binary from the releases page, or build it with cargo."
       - name: Nanobot
+        key: nanobot
         cmd: nanobot
         upstream: "HKUDS (Xubin Ren & contributors, MIT)"
         repo: https://github.com/HKUDS/nanobot
-        install: "pip install nanobot-ai"
+        install: "pip install --user nanobot-ai"
+        install_alt: "uv tool install nanobot-ai"
+        install_windows: "pip install nanobot-ai"
+        requires_windows: pip
+        managed: script
+        installer: install_nanobot
+        installer_windows: Install-Nanobot
+        post_install: "Run 'nanobot onboard' to pick a provider (Ollama works)."
         note: >
           Name collision: nanobot-ai/nanobot (Go) is a different project — an MCP
           host by the Obot team. Tekt ships the HKUDS lightweight agent. If you
           want the MCP-host Nanobot instead, see github.com/nanobot-ai/nanobot.
       - name: NanoClaw
+        key: nanoclaw
         runtime: source
+        detect: "path:$HOME/Tekt/Instances"
         upstream: "qwibitai (MIT) — runs on the Claude Agent SDK"
         repo: https://github.com/qwibitai/nanoclaw
+        install_steps: "git clone --depth 1 https://github.com/qwibitai/nanoclaw into the instance's agents/ folder"
+        managed: script
+        installer: install_nanoclaw
+        installer_windows: Install-NanoClaw
         note: "Setup is Claude-Code-guided: git clone, then run `claude` and /setup"
       - name: Codex CLI
+        key: codex
         cmd: codex
         upstream: "OpenAI (Apache-2.0)"
         repo: https://github.com/openai/codex
         install: "npm install -g @openai/codex"
         install_macos: "brew install --cask codex"
         install_windows: "irm https://chatgpt.com/codex/install.ps1 | iex"
+        install_alt_windows: "npm install -g @openai/codex"
+        managed: script
+        installer: install_codex
+        installer_windows: Install-Codex
+        post_install: "Sign in with: codex login. tekt connect gives it your Spaces."
         note: "Sign in with: codex login. tekt connect gives it your Spaces."
       - name: opencode
+        key: opencode
         cmd: opencode
         upstream: "anomalyco & contributors (MIT)"
         repo: https://github.com/anomalyco/opencode
         install: "npm i -g opencode-ai@latest"
         install_macos: "brew install anomalyco/tap/opencode"
+        requires_linux: npm
+        requires_windows: npm
+        managed: catalog
+        installer: install_opencode
+        installer_windows: Install-OpenCode
+        post_install: "tekt connect gives it your Spaces."
         note: "Open-source terminal coding agent for any provider. tekt connect gives it your Spaces."
       - name: crush
+        key: crush
         cmd: crush
         upstream: "Charm (FSL-1.1-MIT)"
         repo: https://github.com/charmbracelet/crush
         install: "npm install -g @charmland/crush"
         install_macos: "brew install charmbracelet/tap/crush"
-        install_windows: "winget install charmbracelet.crush"
+        install_windows: "winget:charmbracelet.crush"
+        requires_linux: npm
+        managed: catalog
+        installer: install_crush
+        installer_windows: Install-Crush
+        post_install: "tekt connect adds your Spaces to its crushrc."
         note: "Charm's terminal AI assistant. tekt connect adds your Spaces to its crushrc."
       - name: pi
+        key: pi
         cmd: pi
         upstream: "earendil-works & contributors (MIT)"
         repo: https://github.com/earendil-works/pi
         install: "npm install -g --ignore-scripts @earendil-works/pi-coding-agent"
+        requires: npm
+        managed: catalog
+        installer: install_pi
+        installer_windows: Install-Pi
+        post_install: "Skills from your Spaces are linked into ~/.agents/skills — run: pi"
         note: "Minimal, extensible terminal coding agent for any provider. Reads Agent Skills from ~/.agents/skills, where Tekt links your Spaces' skills. No MCP by design."
       - name: omp (oh-my-pi)
+        key: omp
         cmd: omp
         upstream: "can1357 & contributors (MIT) — a fork of pi"
         repo: https://github.com/can1357/oh-my-pi
         install: "curl -fsSL https://omp.sh/install | sh"
         install_macos: "brew install can1357/tap/omp"
         install_windows: "irm https://omp.sh/install.ps1 | iex"
+        managed: catalog
+        installer: install_omp
+        installer_windows: Install-Omp
+        post_install: "On first run it picks up the MCP servers and skills you set up for Claude Code and Codex."
         note: "pi with the IDE wired in: LSP, debugger, subagents, shared sessions. Inherits MCP servers and skills from Claude Code and Codex on first run."
 
   tekt.cloud:
@@ -265,34 +521,59 @@ layers:
     doc: 04-interface.md
     tools:
       - name: MCPHub
+        key: mcphub
         runtime: docker
         upstream: "samanhappy & contributors (Apache-2.0)"
         repo: https://github.com/samanhappy/mcphub
         image: samanhappy/mcphub:latest
         port: 3000
+        install_steps: "docker run the pinned MCPHUB_IMAGE with the instance's mcp_settings.json"
+        managed: script
+        installer: setup_mcphub
+        installer_windows: Setup-McpHub
+        note: "Staged, not started by the full install — bring it up with `tekt mcp`."
         endpoints:
           all: /mcp
           group: /mcp/{group}
           single: /mcp/{server}
           smart: /mcp/$smart
       - name: LibreChat
+        key: librechat
         runtime: docker-compose
         upstream: "Danny Avila & contributors (MIT)"
         repo: https://github.com/danny-avila/LibreChat
         port: 3080
+        install_steps: "git clone LibreChat into the instance's cloud/ folder, then docker compose up -d"
+        managed: script
+        installer: setup_librechat
+        installer_windows: Setup-Ui
+        note: "Staged, not started by the full install — bring it up with `tekt ui`."
       - name: n8n
+        key: n8n
         runtime: docker
         upstream: "n8n GmbH (Sustainable Use License — fair-code, not OSI)"
         repo: https://github.com/n8n-io/n8n
         image: docker.n8n.io/n8nio/n8n
         port: 5678
+        install_steps: "docker run the pinned N8N_IMAGE on port 5678"
+        managed: script
+        installer: setup_n8n
+        installer_windows: Setup-Ui
+        note: "Staged, not started by the full install — bring it up with `tekt ui`."
       - name: Sovrant
+        key: sovrant
         runtime: "dotnet (source build — .NET 10 / C# 14)"
         upstream: "Anant Corporation"
         repo: https://github.com/ramseur/sovrant
         license: "BSL 1.1 — source-available, NOT OSI open source; converts to Apache-2.0 on 2029-05-15"
         ports: { web: 5100, server: 5200 }
+        requires: dotnet
+        install_steps: "git clone github.com/ramseur/sovrant into the instance folder, then dotnet build"
+        managed: script
+        installer: install_sovrant
+        installer_windows: Install-Sovrant
         note: "Command center for agents — CLI, OpenAI-compatible server, desktop, web, MCP server mode (:5200/mcp with SOVRANT_MCP_HTTP=true). Installer clones and builds it; requires .NET 10 SDK."
+
 
 # ── Curated MCP servers ───────────────────────────────────────────────────────
 # These four run locally (inside MCPHub), operate on your machine's Tekt
