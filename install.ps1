@@ -1998,6 +1998,7 @@ function Tekt-Connect($app) {
 
 # -- Status ---------------------------------------------------------------------
 function Tekt-Status {
+    Refresh-SessionPath   # a tool installed moments ago is on PATH in the registry, not yet in this window
     Write-Host "`nTekt Environment Status - https://tekt.md`n" -ForegroundColor Cyan
     $rows = @(
         @("Tekt.Dev",  "Git",         "git"),
