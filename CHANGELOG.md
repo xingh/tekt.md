@@ -8,6 +8,13 @@ permalink: /changelog/index.html
 
 # Changelog
 
+## v0.12.0 — pi and omp
+
+- **pi** (#38): the minimal, extensible coding agent from earendil-works, installed with `npm install -g --ignore-scripts @earendil-works/pi-coding-agent` as its docs recommend.
+- **omp (oh-my-pi)** (#75): the fork of pi with the IDE wired in. It installs from Homebrew, the official script, or its PowerShell installer on Windows.
+- **Shared skills reach pi.** When pi is installed, Tekt also links your Spaces' skills into `~/.agents/skills`, the Agent Skills standard folder. omp inherits the MCP servers and skills set up for Claude Code and Codex, so `tekt connect` and shared skills reach it too.
+- Both appear in `tekt status`, the catalog and the docs.
+
 ## v0.11.0 — Tool shelf
 
 Give your AI vetted tools, and share what it remembers (#47).

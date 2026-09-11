@@ -131,7 +131,7 @@ tekt space sync team             # everyone in the Space gets it on their next s
 tekt skill list                  # every shared skill, and which ones are in your Claude Code
 ```
 
-After each sync, Tekt links every skill in your Spaces into Claude Code as `~/.claude/skills/<space>--<skill>`. When someone deletes a skill, it disappears from everyone's Claude Code, and when you disconnect a Space, its skills go too. Tekt only manages its own links. Your personal skills and any folder that isn't Tekt's are never touched.
+After each sync, Tekt links every skill in your Spaces into Claude Code as `~/.claude/skills/<space>--<skill>`. When pi is installed it also links them into `~/.agents/skills`, the shared folder the [Agent Skills](https://agentskills.io) standard uses. omp picks up Claude Code's skills by itself. When someone deletes a skill, it disappears from everyone's Claude Code, and when you disconnect a Space, its skills go too. Tekt only manages its own links. Your personal skills and any folder that isn't Tekt's are never touched.
 
 ### Add a curated skill
 

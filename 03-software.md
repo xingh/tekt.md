@@ -170,6 +170,29 @@ Upstream: qwibitai (MIT). Repo: [qwibitai/nanoclaw](https://github.com/qwibitai/
 
 ---
 
+### pi — earendil-works, minimal and extensible
+
+A small terminal coding harness for any provider (OpenAI, Anthropic, Google, local). Four tools by default (`read`, `write`, `edit`, `bash`), extended with skills, prompt templates, extensions and themes. It deliberately has no MCP support.
+
+```bash
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent   # --ignore-scripts, as pi's docs recommend
+pi
+```
+
+pi reads [Agent Skills](https://agentskills.io) from `~/.agents/skills`, and Tekt links your Spaces' shared skills there, so a skill a colleague drops into `team/skills/` reaches pi too. Config lives in `~/.pi/agent/`. Docs: [pi.dev](https://pi.dev)
+
+### omp (oh-my-pi) — a fork of pi with the IDE wired in
+
+Adds persistent Python and Bun kernels, language servers and a debugger, subagents, `/collab` shared sessions, and native tools that run on Windows without WSL.
+
+```bash
+curl -fsSL https://omp.sh/install | sh      # or: brew install can1357/tap/omp
+# Windows: irm https://omp.sh/install.ps1 | iex
+omp
+```
+
+On first run omp inherits the MCP servers and skills already set up for Claude Code and Codex, so `tekt connect` and your shared skills reach it with no extra step. Upstream: [can1357/oh-my-pi](https://github.com/can1357/oh-my-pi) (MIT).
+
 ## MCP servers — one hub, four locals, HTTPS out
 
 Instead of wiring MCP servers into each agent and UI separately, Tekt runs **MCPHub** ([samanhappy/mcphub](https://github.com/samanhappy/mcphub), Apache-2.0) as the single aggregation point. Every client — LibreChat, n8n, Claude Code, OpenClaw, ZeroClaw — connects to one Streamable HTTP endpoint and sees every tool.

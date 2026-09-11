@@ -198,6 +198,8 @@ Five documents take you from composition to a shared, working home-lab stack:
 | Codex CLI | OpenAI's coding agent in the terminal | OpenAI (Apache-2.0) |
 | opencode | Open-source terminal coding agent for any provider | anomalyco & contributors (MIT) |
 | crush | Charm's terminal AI assistant | Charm (FSL-1.1-MIT) |
+| pi | Minimal, extensible terminal coding agent for any provider | earendil-works & contributors (MIT) |
+| omp (oh-my-pi) | pi with the IDE wired in: LSP, debugger, subagents, shared sessions | can1357 & contributors (MIT) |
 
 OpenClaw onboarding is intentionally deferred during bootstrap to keep install non-interruptive: run `openclaw onboard --install-daemon` when ready.  
 On Windows, restart PowerShell after installer runs, then verify with `.\install.ps1 status`.
