@@ -103,6 +103,23 @@ tekt connect claude-desktop    # or just one: claude-code, claude-desktop, codex
 
 Running it again changes nothing, and Tekt only touches its own `tekt-spaces` entry. Then ask your AI: *"What's in my team Space?"* or *"Summarize the new files in team/docs."*
 
+## Add tools and shared memory
+
+Tekt also keeps a shelf of hand-picked MCP servers: tools your AI apps can call. One command adds a tool to every AI app `tekt connect` knows about:
+
+```bash
+tekt tool shelf                  # what's on the shelf
+tekt tool add memory team        # a memory your AI writes to, kept in the team Space
+tekt tool add sequential-thinking
+tekt tool remove time            # take a tool back out
+```
+
+**Shared memory** is the point. With `tekt tool add memory team`, the memory server keeps its knowledge graph at `team/knowledge/memory.jsonl`, inside the Space. After a sync, everyone in the Space whose AI has the memory tool recalls the same people, decisions and facts. If two people's AIs write at the same moment, the newest version wins and the other is kept next to it.
+
+Tekt registers each tool under its own name, like `tekt-memory` or `tekt-fetch`. A server you set up yourself, even one called `memory`, is never replaced or removed.
+
+Some tools (`fetch`, `time`) run with `uvx`. If it's missing, Tekt tells you how to install [uv](https://docs.astral.sh/uv/).
+
 ## Share skills
 
 A skill is a folder with a `SKILL.md`: a short set of instructions an AI loads for one kind of job, like "summarize meeting notes our way" or "draft a proposal from our template". You share skills the way you share documents:
@@ -159,6 +176,9 @@ RcloneView is **freemium** software from Bdrive Inc. The core features are free,
 | `tekt skill new <space> <name>` | Start a shared skill from a template |
 | `tekt skill list` | Every shared skill, and which are in your Claude Code |
 | `tekt skill link` | Re-link shared skills into Claude Code (repair) |
+| `tekt tool shelf` | Curated MCP tools your AI apps can call |
+| `tekt tool add <server> [space]` | Add a tool to every AI app; memory can live in a Space |
+| `tekt tool remove <server>` | Take a tool back out of your AI apps |
 | `tekt skill shelf` | Hand-curated skills you can add in one step |
 | `tekt skill add <skill> [space]` | Add a curated skill to a Space, so everyone gets it |
 | `tekt status` | Your tools, your Spaces, and which AI apps are connected, in one check |

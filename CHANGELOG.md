@@ -8,6 +8,16 @@ permalink: /changelog/index.html
 
 # Changelog
 
+## v0.11.0 — Tool shelf
+
+Give your AI vetted tools, and share what it remembers (#47).
+
+- **`tekt tool shelf`** lists hand-picked MCP servers: `memory`, `sequential-thinking`, `fetch` and `time`. The `github` server stays on the curating list while it moves to GitHub's official server.
+- **`tekt tool add <server> [space]`** adds a tool to every AI app Tekt can connect: Claude Code, Claude Desktop, Codex, opencode and crush. **`tekt tool remove <server>`** takes it back out, touching only Tekt's own entry.
+- **Shared AI memory.** `tekt tool add memory team` keeps the memory server's knowledge graph at `team/knowledge/memory.jsonl`, inside the Space, so everyone's AI recalls the same facts after a sync.
+- **Your own servers are safe.** Tekt's tools are registered as `tekt-<name>` (for example `tekt-memory`), so `tool add` and `tool remove` never replace or delete a server you set up yourself.
+- **Under the hood.** `tekt connect` and `tekt tool` now share one "register this server with this app" helper, checked against the real Claude Code CLI and crush, and existing configs stay compatible.
+
 ## v0.10.0 — Claude Desktop everywhere
 
 - **Official Claude Desktop on Linux** (#24). On Ubuntu 22.04+ and Debian 12+ (x86_64 and arm64) with a desktop, Tekt adds Anthropic's apt repository and installs `claude-desktop`, so updates come with your normal system updates. It refuses the signing key unless the fingerprint matches Anthropic's (`31DDDE24…BAA929FF1A7ECACE`). Other distributions and servers are pointed to `claude` in the terminal.

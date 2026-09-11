@@ -1858,13 +1858,116 @@ claude_desktop_config() {
 
 codex_config() { echo "${CODEX_HOME:-$HOME/.codex}/config.toml"; }
 
+# ── One MCP server, one AI app ───────────────────────────────────────────────
+# mcp_apply add|remove <app> <name> <env KEY=VALUE or ""> [command args...]
+# Used by tekt connect (tekt-spaces) and tekt tool (the shelf). Re-running
+# replaces Tekt's own entry; every other entry in the app's config is kept.
+mcp_apply() {
+  local op="$1" app="$2"; shift 2
+  case "$app" in
+    claude-code)
+      if [ "$op" = remove ]; then claude mcp remove --scope user "$1" >/dev/null 2>&1 || true; return 0; fi
+      mcp_claude_code "$@" ;;
+    claude-desktop) mcp_json_app desktop  "$op" "$@" ;;
+    codex)          mcp_codex             "$op" "$@" ;;
+    opencode)       mcp_json_app opencode "$op" "$@" ;;
+    crush)          mcp_crush             "$op" "$@" ;;
+    *) return 1 ;;
+  esac
+}
+
+mcp_claude_code() {  # <name> <env> <command> [args...]
+  local name="$1" env="$2" eflag=()
+  shift 2
+  if [ -n "$env" ]; then eflag=(-e "$env"); fi
+  claude mcp remove --scope user "$name" >/dev/null 2>&1 || true
+  # -e takes a list, so it goes after the name and ends at `--` (it can't swallow the name)
+  claude mcp add --scope user "$name" ${eflag[@]+"${eflag[@]}"} -- "$@" >/dev/null 2>&1
+}
+
+mcp_json_app() {     # desktop|opencode add|remove <name> <env> [command args...]
+  local kind="$1" op="$2" cfg
+  if [ "$kind" = desktop ]; then cfg="$(claude_desktop_config)"; else cfg="$(opencode_config)"; fi
+  command_exists python3 || return 1
+  mkdir -p "$(dirname "$cfg")"
+  if [ -f "$cfg" ]; then cp "$cfg" "$cfg.bak-tekt"; fi
+  python3 - "$kind" "$op" "$cfg" "${@:3}" <<'PY'
+import json, os, sys
+kind, op, path, name, env, *argv = sys.argv[1:]
+key = "mcpServers" if kind == "desktop" else "mcp"
+if op == "remove" and not os.path.exists(path):
+    sys.exit(0)
+data = {"$schema": "https://opencode.ai/config.json"} if kind == "opencode" else {}
+if os.path.exists(path) and os.path.getsize(path) > 0:
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)   # invalid JSON, or JSONC with comments, fails here: the file is left alone
+servers = data.setdefault(key, {})
+if op == "remove":
+    if name not in servers:
+        sys.exit(0)
+    del servers[name]
+else:
+    envd = dict([env.split("=", 1)]) if env else None
+    if kind == "desktop":
+        entry = {"command": argv[0], "args": argv[1:]}
+        if envd: entry["env"] = envd
+    else:
+        entry = {"type": "local", "command": argv, "enabled": True}
+        if envd: entry["environment"] = envd
+    servers[name] = entry
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+PY
+}
+
+mcp_codex() {        # add|remove <name> <env> [command args...]
+  local op="$1" name="$2" env="$3" cfg a args=""
+  shift 3
+  cfg="$(codex_config)"
+  mkdir -p "$(dirname "$cfg")"
+  if [ -f "$cfg" ]; then
+    cp "$cfg" "$cfg.bak-tekt"
+    # drop Tekt's previous block (and trailing blank lines), keep everything else
+    awk -v h="[mcp_servers.$name]" '$0 == h { skip = 1; next } /^\[/ { skip = 0 } !skip' "$cfg.bak-tekt" \
+      | awk 'NF { while (n > 0) { print ""; n-- } print; next } { n++ }' > "$cfg"
+  fi
+  if [ "$op" = remove ]; then return 0; fi
+  local cmd="$1"; shift
+  for a in "$@"; do args="$args${args:+, }\"$(printf '%s' "$a" | sed 's/[\\"]/\\&/g')\""; done
+  {
+    printf '\n[mcp_servers.%s]\ncommand = "%s"\nargs = [%s]\n' "$name" "$cmd" "$args"
+    if [ -n "$env" ]; then printf 'env = { %s = "%s" }\n' "${env%%=*}" "$(printf '%s' "${env#*=}" | sed 's/[\\"]/\\&/g')"; fi
+  } >> "$cfg"
+}
+
+crush_quote() { printf '"%s"' "$(printf '%s' "$1" | sed 's/[\\"$`]/\\&/g')"; }   # crushrc is Bash
+
+mcp_crush() {        # add|remove <name> <env> [command args...]
+  local op="$1" name="$2" env="$3" cfg begin end line a
+  shift 3
+  cfg="$(crush_config)"
+  begin="# >>> $name (managed by tekt connect) >>>"
+  end="# <<< $name <<<"
+  mkdir -p "$(dirname "$cfg")"
+  if [ -f "$cfg" ]; then
+    cp "$cfg" "$cfg.bak-tekt"
+    awk -v b="$begin" -v e="$end" '$0 == b { skip = 1; next } skip && $0 == e { skip = 0; next } !skip' "$cfg.bak-tekt" \
+      | awk 'NF { while (n > 0) { print ""; n-- } print; next } { n++ }' > "$cfg"
+  fi
+  if [ "$op" = remove ]; then return 0; fi
+  line="mcp add $name --command $1"; shift
+  for a in "$@"; do line="$line --args $(crush_quote "$a")"; done
+  if [ -n "$env" ]; then line="$line --env ${env%%=*} $(crush_quote "${env#*=}")"; fi
+  printf '\n%s\n%s\n%s\n' "$begin" "$line" "$end" >> "$cfg"
+}
+
 connect_claude_code() {
   if ! command_exists claude; then
     warn "Claude Code isn't installed — skipping. Install: curl -fsSL https://claude.ai/install.sh | bash"
     return 1
   fi
-  claude mcp remove --scope user "$TEKT_MCP_NAME" >/dev/null 2>&1 || true
-  if claude mcp add --scope user "$TEKT_MCP_NAME" -- npx -y "$TEKT_MCP_PKG" "$TEKT_SPACES" >/dev/null 2>&1; then
+  if mcp_apply add claude-code "$TEKT_MCP_NAME" "" npx -y "$TEKT_MCP_PKG" "$TEKT_SPACES"; then
     success "Claude Code can use your Spaces (MCP server '$TEKT_MCP_NAME')"
   else
     warn "Claude Code didn't accept the server. Add it by hand:"
@@ -1880,34 +1983,11 @@ connect_claude_desktop() {
     warn "Claude Desktop isn't installed — skipping. Get it at https://claude.ai/download"
     return 1
   fi
-  mkdir -p "$(dirname "$cfg")"
-  if [ -f "$cfg" ]; then cp "$cfg" "$cfg.bak-tekt"; fi
-  if command_exists python3; then
-    python3 - "$cfg" "$TEKT_MCP_NAME" "$TEKT_MCP_PKG" "$TEKT_SPACES" <<'PY' || merged=0
-import json, os, sys
-path, name, pkg, spaces = sys.argv[1:5]
-data = {}
-if os.path.exists(path) and os.path.getsize(path) > 0:
-    with open(path, encoding="utf-8") as f:
-        data = json.load(f)
-data.setdefault("mcpServers", {})[name] = {"command": "npx", "args": ["-y", pkg, spaces]}
-with open(path, "w", encoding="utf-8") as f:
-    json.dump(data, f, indent=2)
-    f.write("\n")
-PY
-  elif command_exists node; then
-    node -e '
-const fs = require("fs"); const [path, name, pkg, spaces] = process.argv.slice(1);
-let data = {}; if (fs.existsSync(path) && fs.statSync(path).size) data = JSON.parse(fs.readFileSync(path, "utf8"));
-(data.mcpServers ||= {})[name] = { command: "npx", args: ["-y", pkg, spaces] };
-fs.writeFileSync(path, JSON.stringify(data, null, 2) + "\n");' "$cfg" "$TEKT_MCP_NAME" "$TEKT_MCP_PKG" "$TEKT_SPACES" || merged=0
-  else
-    merged=0
-  fi
+  mcp_apply add claude-desktop "$TEKT_MCP_NAME" "" npx -y "$TEKT_MCP_PKG" "$TEKT_SPACES" || merged=0
   if [ "$merged" -eq 1 ]; then
     success "Claude Desktop can use your Spaces after you restart it ($cfg)"
   else
-    warn "Couldn't update $cfg (needs python3 or node, and the file must be valid JSON). Your original is untouched."
+    warn "Couldn't update $cfg (needs python3, and the file must be valid JSON). Your original is untouched."
     return 1
   fi
 }
@@ -1917,16 +1997,8 @@ connect_codex() {
     warn "Codex CLI isn't installed — skipping. Install: npm install -g @openai/codex"
     return 1
   fi
-  local cfg; cfg="$(codex_config)"
-  mkdir -p "$(dirname "$cfg")"
-  if [ -f "$cfg" ]; then
-    cp "$cfg" "$cfg.bak-tekt"
-    # drop Tekt's previous block (and trailing blank lines), keep everything else
-    awk -v h="[mcp_servers.$TEKT_MCP_NAME]" '$0 == h { skip = 1; next } /^\[/ { skip = 0 } !skip' "$cfg.bak-tekt" \
-      | awk 'NF { while (n > 0) { print ""; n-- } print; next } { n++ }' > "$cfg"
-  fi
-  printf '\n[mcp_servers.%s]\ncommand = "npx"\nargs = ["-y", "%s", "%s"]\n' "$TEKT_MCP_NAME" "$TEKT_MCP_PKG" "$TEKT_SPACES" >> "$cfg"
-  success "Codex can use your Spaces ($cfg)"
+  mcp_apply add codex "$TEKT_MCP_NAME" "" npx -y "$TEKT_MCP_PKG" "$TEKT_SPACES"
+  success "Codex can use your Spaces ($(codex_config))"
 }
 
 opencode_config() { echo "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/opencode.json"; }
@@ -1938,21 +2010,7 @@ connect_opencode() {
     return 1
   fi
   local cfg; cfg="$(opencode_config)"
-  mkdir -p "$(dirname "$cfg")"
-  if [ -f "$cfg" ]; then cp "$cfg" "$cfg.bak-tekt"; fi
-  if command_exists python3 && python3 - "$cfg" "$TEKT_MCP_NAME" "$TEKT_MCP_PKG" "$TEKT_SPACES" <<'PY'
-import json, os, sys
-path, name, pkg, spaces = sys.argv[1:5]
-data = {"$schema": "https://opencode.ai/config.json"}
-if os.path.exists(path) and os.path.getsize(path) > 0:
-    with open(path, encoding="utf-8") as f:
-        data = json.load(f)   # a JSONC file with comments fails here and is left alone
-data.setdefault("mcp", {})[name] = {"type": "local", "command": ["npx", "-y", pkg, spaces], "enabled": True}
-with open(path, "w", encoding="utf-8") as f:
-    json.dump(data, f, indent=2)
-    f.write("\n")
-PY
-  then
+  if mcp_apply add opencode "$TEKT_MCP_NAME" "" npx -y "$TEKT_MCP_PKG" "$TEKT_SPACES" 2>/dev/null; then
     success "opencode can use your Spaces ($cfg)"
   else
     warn "Couldn't update $cfg by itself (it may contain comments). Add this under \"mcp\":"
@@ -1966,20 +2024,133 @@ connect_crush() {
     warn "crush isn't installed — skipping. Install: npm install -g @charmland/crush"
     return 1
   fi
-  local cfg begin end path
-  cfg="$(crush_config)"
-  begin="# >>> $TEKT_MCP_NAME (managed by tekt connect) >>>"
-  end="# <<< $TEKT_MCP_NAME <<<"
-  path="$(printf '%s' "$TEKT_SPACES" | sed 's/[\\"$`]/\\&/g')"   # crushrc is Bash: escape for double quotes
-  mkdir -p "$(dirname "$cfg")"
-  if [ -f "$cfg" ]; then
-    cp "$cfg" "$cfg.bak-tekt"
-    awk -v b="$begin" -v e="$end" '$0 == b { skip = 1; next } skip && $0 == e { skip = 0; next } !skip' "$cfg.bak-tekt" \
-      | awk 'NF { while (n > 0) { print ""; n-- } print; next } { n++ }' > "$cfg"
+  mcp_apply add crush "$TEKT_MCP_NAME" "" npx -y "$TEKT_MCP_PKG" "$TEKT_SPACES"
+  success "crush can use your Spaces ($(crush_config))"
+}
+
+# =============================================================================
+# Tool shelf — curated MCP servers for every AI app (tekt tool shelf | add | remove)
+# =============================================================================
+catalog_tools() {    # name, command, args, needs, space_env, summary, status (\037-separated) for mcp_servers:
+  awk '
+    function flush() { if (n != "") print n "\037" c "\037" a "\037" nd "\037" se "\037" s "\037" st; n = ""; c = ""; a = ""; nd = ""; se = ""; s = ""; st = "" }
+    function val(line, key) { sub("^    " key ":[ \t]*\"?", "", line); sub("\"[ \t]*$", "", line); return line }
+    /^mcp_servers:/ { on = 1; next }
+    on && /^[^ #]/ { flush(); on = 0 }
+    on && /^  [a-z0-9-]+:[ \t]*$/ { flush(); n = $1; sub(/:$/, "", n); next }
+    on && /^    command:/   { c  = val($0, "command"); next }
+    on && /^    args:/      { a  = val($0, "args"); next }
+    on && /^    needs:/     { nd = val($0, "needs"); next }
+    on && /^    space_env:/ { se = val($0, "space_env"); next }
+    on && /^    summary:/   { s  = val($0, "summary"); next }
+    on && /^    status:/    { st = val($0, "status"); next }
+    END { flush() }
+  ' "$1"
+}
+
+tool_app_present() {
+  case "$1" in
+    claude-code)    command_exists claude ;;
+    claude-desktop) claude_desktop_installed || [ -d "$(dirname "$(claude_desktop_config)")" ] ;;
+    codex)          command_exists codex ;;
+    opencode)       command_exists opencode ;;
+    crush)          command_exists crush ;;
+    *)              return 1 ;;
+  esac
+}
+
+tool_app_label() {
+  case "$1" in
+    claude-code) echo "Claude Code" ;; claude-desktop) echo "Claude Desktop" ;;
+    codex) echo "Codex" ;; opencode) echo "opencode" ;; crush) echo "crush" ;; *) echo "$1" ;;
+  esac
+}
+
+tool_shelf() {
+  section "The tool shelf — curated MCP servers for your AI apps"
+  local cat name cmd args needs senv summary status mark note
+  if ! cat="$(tekt_catalog_file)"; then error "Couldn't read the catalog. Check your connection and try again."; return 1; fi
+  while IFS=$'\037' read -r name cmd args needs senv summary status; do
+    if [ "$status" = available ] || [ "$status" = default ]; then mark="${GREEN}●${RESET}"; else mark="${YELLOW}○${RESET}"; fi
+    note=""
+    if [ "$status" = default ]; then note="  (tekt connect adds it as $TEKT_MCP_NAME)"; fi
+    if [ -n "$needs" ] && ! command_exists "$needs"; then note="$note  (needs $needs)"; fi
+    printf "  %b %-20s %s%s\n" "$mark" "$name" "$summary" "$note"
+  done < <(catalog_tools "$cat")
+  log "Add one:  tekt tool add <server>      Share AI memory through a Space:  tekt tool add memory team"
+}
+
+tool_add() {
+  local name="" space="" only_app="" cat entry cmd args needs senv summary status env="" app added=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --app) only_app="${2:-}"; shift; [ $# -gt 0 ] && shift ;;
+      *) if [ -z "$name" ]; then name="$1"; elif [ -z "$space" ]; then space="$1"; fi; shift ;;
+    esac
+  done
+  if [ -z "$name" ]; then error "Which tool?  tekt tool add <server> [space]   (see: tekt tool shelf)"; return 1; fi
+  if ! cat="$(tekt_catalog_file)"; then error "Couldn't read the catalog. Check your connection and try again."; return 1; fi
+  entry="$(catalog_tools "$cat" | awk -F '\037' -v n="$name" '$1 == n')"
+  if [ -z "$entry" ]; then error "'$name' isn't on the shelf. See:  tekt tool shelf"; return 1; fi
+  IFS=$'\037' read -r _ cmd args needs senv summary status <<<"$entry"
+  if [ "$status" = default ]; then log "'$name' is how Tekt connects your Spaces already. Run:  tekt connect"; return 0; fi
+  if [ -z "$cmd" ] || [ "$status" != available ]; then warn "'$name' isn't available yet; it's still being curated."; return 1; fi
+  if [ -n "$needs" ] && ! command_exists "$needs"; then
+    if [ "$needs" = uvx ]; then
+      error "'$name' needs uvx. Install uv first: curl -LsSf https://astral.sh/uv/install.sh | sh   (https://docs.astral.sh/uv/)"
+    else
+      error "'$name' needs $needs. Install it first, then run this again."
+    fi
+    return 1
   fi
-  printf '\n%s\nmcp add %s --command npx --args -y --args %s --args "%s"\n%s\n' \
-    "$begin" "$TEKT_MCP_NAME" "$TEKT_MCP_PKG" "$path" "$end" >> "$cfg"
-  success "crush can use your Spaces ($cfg)"
+  if [ -n "$senv" ]; then        # e.g. memory: keep its file inside a Space so everyone shares it
+    if [ -z "$space" ]; then
+      local dir count=0 only=""
+      for dir in "$TEKT_SPACES"/*/; do
+        dir="${dir%/}"; [ -f "$dir/.tekt-space" ] || continue
+        count=$((count + 1)); only="$(basename "$dir")"
+      done
+      if [ "$count" -eq 1 ]; then space="$only"; fi
+    fi
+    if [ -n "$space" ]; then
+      if [ ! -f "$TEKT_SPACES/$space/.tekt-space" ]; then error "No Space named '$space'. See:  tekt space list"; return 1; fi
+      mkdir -p "$(dirname "$TEKT_SPACES/$space/${senv#*=}")"
+      env="${senv%%=*}=$TEKT_SPACES/$space/${senv#*=}"
+    fi
+  fi
+  local argv=()
+  read -r -a argv <<<"$args"
+  for app in claude-code claude-desktop codex opencode crush; do
+    if [ -n "$only_app" ] && [ "$only_app" != "$app" ]; then continue; fi
+    tool_app_present "$app" || continue
+    # registered as tekt-<name>, so Tekt never replaces (or removes) a server you added yourself
+    if mcp_apply add "$app" "tekt-$name" "$env" "$cmd" ${argv[@]+"${argv[@]}"} 2>/dev/null; then
+      success "$(tool_app_label "$app") can use $name"; added=1
+    else
+      warn "Couldn't add $name to $(tool_app_label "$app") (its config may have comments or invalid JSON; it was left alone)."
+    fi
+  done
+  if [ "$added" -eq 0 ]; then warn "No AI app found to add it to. Install Claude Code, Codex or another app first."; return 1; fi
+  if [ -n "$env" ]; then
+    log "Its memory lives in the $space Space (${env#*=}). After  tekt space sync $space  everyone's AI shares it."
+  fi
+}
+
+tool_remove() {
+  local name="${1:-}" app
+  if [ -z "$name" ]; then error "Which tool?  tekt tool remove <server>"; return 1; fi
+  if [ "$name" = "$TEKT_MCP_NAME" ] || [ "$name" = filesystem ]; then
+    error "That's how Tekt connects your Spaces; tekt tool remove leaves it alone."
+    return 1
+  fi
+  for app in claude-code claude-desktop codex opencode crush; do
+    tool_app_present "$app" || continue
+    if mcp_apply remove "$app" "tekt-${name#tekt-}" "" 2>/dev/null; then
+      success "Removed $name from $(tool_app_label "$app")"
+    else
+      warn "Couldn't update $(tool_app_label "$app"); its config was left alone."
+    fi
+  done
 }
 
 tekt_connect() {
@@ -2340,6 +2511,9 @@ Share with your AI and your people
   skill link                           Re-link shared skills into Claude Code
   skill shelf                          Hand-curated skills you can add in one step
   skill add <skill> [space]            Add a curated skill to a Space (everyone gets it)
+  tool shelf                           Curated MCP tools your AI apps can call
+  tool add <server> [space]            Add a tool to every AI app (memory can live in a Space)
+  tool remove <server>                 Take a tool back out of your AI apps
 
 Set up and check
   install        Install all Tekt tools (what the one-line installer runs)
@@ -2759,6 +2933,15 @@ case "${1:-}" in
     ;;
   connect)
     tekt_connect "${2:-all}"
+    ;;
+  tool|tools)
+    shift
+    case "${1:-shelf}" in
+      shelf|list|ls) tool_shelf ;;
+      add)           shift; tool_add "$@" ;;
+      remove|rm)     tool_remove "${2:-}" ;;
+      *) error "Unknown: tool ${1} — use shelf, add or remove"; exit 1 ;;
+    esac
     ;;
   skill|skills)
     shift

@@ -125,6 +125,7 @@ tekt space add team drive    # share a folder with your AI and your people (Driv
 tekt space autosync on       # keep your Spaces in sync every 10 minutes
 tekt connect                 # let Claude Code, Claude Desktop and Codex use your Spaces
 tekt space invite team       # write an invitation for your colleagues (copied to the clipboard)
+tekt tool add memory team    # give your AI apps a memory that lives in the team Space
 bash install.sh status       # what landed, layer by layer
 bash install.sh mcp          # MCPHub + 4 curated MCP servers → :3000
 bash install.sh ui           # LibreChat → :3080, n8n → :5678
