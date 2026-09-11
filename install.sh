@@ -1841,6 +1841,41 @@ install_crush() {
 }
 
 # =============================================================================
+# pi (earendil-works) and omp (oh-my-pi, a fork of pi)
+# =============================================================================
+install_pi() {
+  section "pi (coding agent)"
+  if command_exists pi; then success "pi already installed"; return 0; fi
+  if ! command_exists npm; then warn "pi needs Node.js (npm). Install it first:  tekt install"; return 1; fi
+  # --ignore-scripts, as pi's own docs recommend for npm installs
+  npm install -g --ignore-scripts @earendil-works/pi-coding-agent --silent || true
+  reload_path
+  if command_exists pi; then
+    success "pi installed — run: pi   (skills from your Spaces are linked into ~/.agents/skills)"
+  else
+    warn "pi didn't install. Try: npm install -g @earendil-works/pi-coding-agent"
+    return 1
+  fi
+}
+
+install_omp() {
+  section "omp (oh-my-pi)"
+  if command_exists omp; then success "omp already installed"; return 0; fi
+  if command_exists brew; then
+    brew install can1357/tap/omp --quiet || true
+  else
+    curl -fsSL https://omp.sh/install | sh || true
+  fi
+  reload_path
+  if command_exists omp; then
+    success "omp installed — on first run it picks up the MCP servers and skills you set up for Claude Code and Codex"
+  else
+    warn "omp didn't install. Try: curl -fsSL https://omp.sh/install | sh"
+    return 1
+  fi
+}
+
+# =============================================================================
 # Connect — let your AI apps use your Spaces (tekt connect [app])
 # Registers the MCP filesystem server, scoped to ~/Tekt/Spaces, with each AI
 # app on this computer: Claude Code, Claude Desktop, Codex. Re-running replaces
@@ -2201,6 +2236,7 @@ tekt_connect() {
 # Tekt only ever touches links that point into your Spaces folder.
 # =============================================================================
 TEKT_CLAUDE_SKILLS="${TEKT_CLAUDE_SKILLS:-$HOME/.claude/skills}"
+TEKT_AGENT_SKILLS="${TEKT_AGENT_SKILLS:-$HOME/.agents/skills}"   # Agent Skills standard folder (pi, and others)
 
 skill_owned_link() {   # true if $1 is a symlink that points into the Spaces folder
   [ -L "$1" ] || return 1
@@ -2211,10 +2247,18 @@ skill_owned_link() {   # true if $1 is a symlink that points into the Spaces fol
 }
 
 space_link_skills() {  # space_link_skills [space] — link one Space's skills, or every Space's
-  local only="${1:-}" link target tspace sdir name skill
-  mkdir -p "$TEKT_CLAUDE_SKILLS"
+  local only="${1:-}"
+  space_link_skills_into "$TEKT_CLAUDE_SKILLS" "$only"
+  # pi (and other Agent Skills apps) read ~/.agents/skills; omp inherits Claude Code's skills
+  if command_exists pi || [ -d "$TEKT_AGENT_SKILLS" ]; then space_link_skills_into "$TEKT_AGENT_SKILLS" "$only"; fi
+  return 0
+}
+
+space_link_skills_into() {  # space_link_skills_into <skills dir> [space]
+  local dest="$1" only="${2:-}" link target tspace sdir name skill
+  mkdir -p "$dest"
   # Drop Tekt's links whose skill is gone, or whose Space was disconnected.
-  for link in "$TEKT_CLAUDE_SKILLS"/*--*; do
+  for link in "$dest"/*--*; do
     if ! skill_owned_link "$link"; then continue; fi
     if [ -n "$only" ]; then
       case "$(basename "$link")" in "$only"--*) ;; *) continue ;; esac
@@ -2231,7 +2275,7 @@ space_link_skills() {  # space_link_skills [space] — link one Space's skills, 
     for skill in "$sdir"/skills/*/; do
       skill="${skill%/}"
       [ -f "$skill/SKILL.md" ] || continue
-      link="$TEKT_CLAUDE_SKILLS/$name--$(basename "$skill")"
+      link="$dest/$name--$(basename "$skill")"
       if [ -e "$link" ] && ! skill_owned_link "$link"; then
         warn "Skipping $(basename "$link"): something else already lives at $link"
         continue
@@ -2601,6 +2645,8 @@ print_summary() {
   check "Codex CLI"       codex
   check "opencode"        opencode
   check "crush"           crush
+  check "pi"              pi
+  check "omp (oh-my-pi)"  omp
 
   echo ""
   log "Staged (tekt.cloud): MCPHub/LibreChat/n8n/Sovrant — bring up with:"
@@ -2720,6 +2766,8 @@ tekt_status() {
   check_tool "Codex CLI"       codex     iris
   check_tool "opencode"        opencode  iris
   check_tool "crush"           crush     iris
+  check_tool "pi"              pi        iris
+  check_tool "omp (oh-my-pi)"  omp       iris
   if [ -d "$TEKT_AGENTS_DIR/nanoclaw/.git" ]; then
     printf "  ${GREEN}✓${RESET}  %-18s %s\n" "NanoClaw" "staged at $TEKT_AGENTS_DIR/nanoclaw"
   else
@@ -2874,6 +2922,8 @@ main() {
   install_codex         || warn "Codex CLI install failed — continuing..."
   install_opencode      || warn "opencode install failed — continuing..."
   install_crush         || warn "crush install failed — continuing..."
+  install_pi            || warn "pi install failed — continuing..."
+  install_omp           || warn "omp install failed — continuing..."
 
   # ── Tekt.Cloud (staged — start with `install.sh mcp` / `install.sh ui`) ──
   install_dotnet        || warn ".NET SDK install skipped — continuing..."

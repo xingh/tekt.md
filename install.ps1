@@ -6,7 +6,7 @@
 # Installs (winget): Git, GitHub CLI, Go, Python, Node LTS, VS Code, Docker Desktop,
 #                    rclone, AWS CLI, Tailscale, ngrok, Ollama, crush
 # Installs (native): Claude Code, Claude Desktop, Zed Agent, OpenClaw, PicoClaw, ZeroClaw, Nanobot,
-#                    Codex CLI, opencode
+#                    Codex CLI, opencode, pi, omp (oh-my-pi)
 # Stages:            NanoClaw (WSL2/Docker), MCPHub, LibreChat, n8n
 # Not on Windows:    Hermes Agent (use WSL2 -> bash install.sh)
 #
@@ -98,6 +98,7 @@ $TektCliPs1    = Join-Path $TektBin "tekt.ps1"
 $TektMcpName   = "tekt-spaces"
 $TektMcpPkg    = "@modelcontextprotocol/server-filesystem"
 $TektClaudeSkills = if ($env:TEKT_CLAUDE_SKILLS) { $env:TEKT_CLAUDE_SKILLS } else { Join-Path (Join-Path $HOME ".claude") "skills" }
+$TektAgentSkills  = if ($env:TEKT_AGENT_SKILLS)  { $env:TEKT_AGENT_SKILLS }  else { Join-Path (Join-Path $HOME ".agents") "skills" }   # pi reads skills here
 $TektResults   = [System.Collections.Generic.List[object]]::new()   # winget install results for the final summary
 $EmDash        = [string][char]0x2014   # built from char codes so the file parses the same under any encoding
 $MidDot        = [string][char]0x00B7
@@ -382,6 +383,50 @@ function Install-OpenCode {
 
 function Install-Crush {
     Install-Winget "crush" "charmbracelet.crush" "crush"
+}
+
+function Install-Pi {
+    Section "pi (coding agent)"
+    if (Test-Cmd "pi") { Success "pi already installed"; Add-InstallResult "pi" $true; return }
+    if (-not (Test-Cmd "npm")) {
+        Warn "pi needs Node.js (npm). Install Node.js LTS first:  winget install OpenJS.NodeJS.LTS"
+        Add-InstallResult "pi" $false
+        return
+    }
+    npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+    $code = $LASTEXITCODE
+    Refresh-SessionPath
+    if (Test-Cmd "pi") {
+        Success "pi installed"
+        Add-InstallResult "pi" $true
+    } elseif ($code -eq 0) {
+        Warn "pi was installed but isn't on PATH yet. Open a new PowerShell window, then run: pi"
+        Add-InstallResult "pi" $true -Pending
+    } else {
+        Warn "pi didn't install (npm exit code $code). Try: npm install -g --ignore-scripts @earendil-works/pi-coding-agent"
+        Add-InstallResult "pi" $false
+    }
+}
+
+function Install-Omp {
+    Section "omp (oh-my-pi)"
+    if (Test-Cmd "omp") { Success "omp already installed"; Add-InstallResult "omp" $true; return }
+    # Run the official installer in its own PowerShell process (like Install-Codex), so an
+    # `exit` inside that script can't end this installer.
+    $ps = if (Test-Cmd "pwsh") { "pwsh" } else { "powershell" }
+    & $ps -NoProfile -ExecutionPolicy Bypass -Command "irm https://omp.sh/install.ps1 | iex"
+    $code = $LASTEXITCODE
+    Refresh-SessionPath
+    if (Test-Cmd "omp") {
+        Success "omp installed"
+        Add-InstallResult "omp" $true
+    } elseif ($code -eq 0) {
+        Warn "omp was installed but isn't on PATH yet. Open a new PowerShell window, then run: omp"
+        Add-InstallResult "omp" $true -Pending
+    } else {
+        Warn "omp didn't install (installer exit code $code). Try: irm https://omp.sh/install.ps1 | iex"
+        Add-InstallResult "omp" $false
+    }
 }
 
 function Install-Sovrant {
@@ -1200,13 +1245,21 @@ function Get-SpaceSkillDirs($spaceDir) {
         Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "SKILL.md") }
 }
 
-function Link-SpaceSkills($only) {   # link one Space's skills, or every Space's
-    New-Item -ItemType Directory -Force -Path $TektClaudeSkills | Out-Null
-    if (-not (Test-Path -LiteralPath $TektClaudeSkills)) { Warn "Couldn't create $TektClaudeSkills"; return }
+# Link one Space's skills (or every Space's) into Claude Code's skills folder, and also into
+# pi's (~/.agents/skills) when pi is installed or that folder already exists.
+function Link-SpaceSkills($only) {
+    $targets = @($TektClaudeSkills)
+    if ((Test-Cmd "pi") -or (Test-Path -LiteralPath $TektAgentSkills)) { $targets += $TektAgentSkills }
+    foreach ($dir in $targets) { Link-SkillsInto $dir $only }
+}
+
+function Link-SkillsInto($skillsDir, $only) {   # link + prune Tekt's <space>--<skill> links in one skills folder
+    New-Item -ItemType Directory -Force -Path $skillsDir | Out-Null
+    if (-not (Test-Path -LiteralPath $skillsDir)) { Warn "Couldn't create $skillsDir"; return }
     $root = Get-SpacesRootFull
 
     # Drop Tekt's links whose skill is gone, or whose Space was disconnected.
-    foreach ($link in @([IO.Directory]::GetFileSystemEntries($TektClaudeSkills, "*--*"))) {
+    foreach ($link in @([IO.Directory]::GetFileSystemEntries($skillsDir, "*--*"))) {
         if (-not (Test-SkillOwnedLink $link)) { continue }
         if ($only -and -not (Split-Path $link -Leaf).StartsWith("$only--")) { continue }
         $target = Get-SkillLinkTarget $link
@@ -1221,7 +1274,7 @@ function Link-SpaceSkills($only) {   # link one Space's skills, or every Space's
         $name = Split-Path $sdir -Leaf
         if ($only -and $only -ne $name) { continue }
         foreach ($skill in @(Get-SpaceSkillDirs $sdir)) {
-            $link = Join-Path $TektClaudeSkills "$name--$($skill.Name)"
+            $link = Join-Path $skillsDir "$name--$($skill.Name)"
             if (Test-SkillOwnedLink $link) {
                 if ((Get-SkillLinkTarget $link) -eq [IO.Path]::GetFullPath($skill.FullName)) { continue }   # already right
                 Remove-SkillLink $link
@@ -2021,7 +2074,9 @@ function Tekt-Status {
         @("Tekt.Iris", "Nanobot",     "nanobot"),
         @("Tekt.Iris", "Codex CLI",   "codex"),
         @("Tekt.Iris", "opencode",    "opencode"),
-        @("Tekt.Iris", "crush",       "crush")
+        @("Tekt.Iris", "crush",       "crush"),
+        @("Tekt.Iris", "pi",          "pi"),
+        @("Tekt.Iris", "omp (oh-my-pi)", "omp")
     )
     $installed = 0; $missing = 0
     foreach ($r in $rows) {
@@ -2141,6 +2196,8 @@ function Main {
     Install-Codex
     Install-OpenCode
     Install-Crush
+    Install-Pi
+    Install-Omp
     Section "Hermes Agent"
     Warn "Hermes has no native Windows build - use WSL2: wsl --install, then bash install.sh"
     # Tekt.Cloud
@@ -2219,7 +2276,7 @@ switch ($Command) {
         Write-Host "Shared skills: skills in a Space appear in everyone's Claude Code"
         Write-Host "  skill list                            Skills shared in your Spaces, and which are in Claude Code"
         Write-Host "  skill new <space> <name>              Start a skill in a Space; everyone gets it after sync"
-        Write-Host "  skill link                            Re-link shared skills into Claude Code"
+        Write-Host "  skill link                            Re-link shared skills into Claude Code (and pi, when installed)"
         Write-Host "  skill shelf                           Hand-curated skills you can add in one step"
         Write-Host "  skill add <skill> [space]             Add a curated skill to a Space (everyone gets it)"
         Write-Host ""

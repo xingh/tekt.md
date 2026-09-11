@@ -245,6 +245,20 @@ layers:
         install_macos: "brew install charmbracelet/tap/crush"
         install_windows: "winget install charmbracelet.crush"
         note: "Charm's terminal AI assistant. tekt connect adds your Spaces to its crushrc."
+      - name: pi
+        cmd: pi
+        upstream: "earendil-works & contributors (MIT)"
+        repo: https://github.com/earendil-works/pi
+        install: "npm install -g --ignore-scripts @earendil-works/pi-coding-agent"
+        note: "Minimal, extensible terminal coding agent for any provider. Reads Agent Skills from ~/.agents/skills, where Tekt links your Spaces' skills. No MCP by design."
+      - name: omp (oh-my-pi)
+        cmd: omp
+        upstream: "can1357 & contributors (MIT) — a fork of pi"
+        repo: https://github.com/can1357/oh-my-pi
+        install: "curl -fsSL https://omp.sh/install | sh"
+        install_macos: "brew install can1357/tap/omp"
+        install_windows: "irm https://omp.sh/install.ps1 | iex"
+        note: "pi with the IDE wired in: LSP, debugger, subagents, shared sessions. Inherits MCP servers and skills from Claude Code and Codex on first run."
 
   tekt.cloud:
     title: "Chat, Workflows & Command Center"
