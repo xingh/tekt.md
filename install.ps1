@@ -745,6 +745,49 @@ function Get-SpaceBackend($provider) {
     return ""
 }
 
+# rclone's own type name -> the provider word Tekt uses (the reverse of Get-SpaceBackend)
+function ConvertFrom-RcloneType($type) {
+    switch (([string]$type).Trim().ToLowerInvariant()) {
+        "drive"    { return "drive" }
+        "onedrive" { return "onedrive" }
+        "dropbox"  { return "dropbox" }
+        "box"      { return "box" }
+        "webdav"   { return "nextcloud" }
+        "alias"    { return "folder" }
+        "local"    { return "folder" }
+        "s3"       { return "s3" }
+        "b2"       { return "s3" }
+    }
+    return ""
+}
+
+# Every remote rclone already knows about, whoever created it: Name and Type.
+function Get-RcloneRemotes {
+    if (-not (Test-Cmd "rclone")) { return @() }
+    $found = @()
+    foreach ($line in @(& rclone listremotes --long 2>$null)) {
+        $t = ([string]$line).Trim()
+        if (-not $t) { continue }
+        # --long prints "name: type"; older rclone prints a bare "name:"
+        if ($t -match '^(.*?):\s+(\S+)$') { $found += [pscustomobject]@{ Name = $Matches[1]; Type = $Matches[2] } }
+        elseif ($t -match '^(.*?):$')     { $found += [pscustomobject]@{ Name = $Matches[1]; Type = "" } }
+    }
+    if ($found.Count -eq 0) {
+        foreach ($line in @(& rclone listremotes 2>$null)) {
+            $t = ([string]$line).Trim().TrimEnd(':')
+            if ($t) { $found += [pscustomobject]@{ Name = $t; Type = "" } }
+        }
+    }
+    return $found
+}
+
+# The remote a Space actually uses, so nothing has to assume the tekt- prefix.
+function Get-SpaceRemote($dir, $name) {
+    $r = Get-SpaceMeta $dir "remote"
+    if ($r) { return $r }
+    return "tekt-$name"
+}
+
 function Get-SpaceLabel($backend) {
     switch ($backend) {
         "drive"    { return "Google Drive" }
@@ -754,6 +797,7 @@ function Get-SpaceLabel($backend) {
         "webdav"   { return "Nextcloud / WebDAV" }
         "alias"    { return "a folder" }
         "s3"       { return "S3" }
+        "generic"  { return "your storage" }
     }
     return ""
 }
@@ -812,6 +856,7 @@ function Space-Add($rawName, $provider, $folder) {
     if (-not $name) { Err "A Space needs a name made of letters or numbers, e.g.  tekt space add team drive"; return }
     $dir    = Join-Path $TektSpaces $name
     $remote = "tekt-$name"
+    $adopted = $false        # true when the Space rides a remote the user already had
 
     if (-not (Test-Rclone)) { return }
 
@@ -821,12 +866,27 @@ function Space-Add($rawName, $provider, $folder) {
         return
     }
 
+    # remotes already backing a Space are not offered again
+    $inUseRemotes = @{}
+    foreach ($d in @(Get-SpaceDirs)) { $inUseRemotes[(Get-SpaceRemote $d (Split-Path $d -Leaf))] = $true }
+
     if (-not $provider) {
         Write-Host ""
         Write-Host "Where should the Space '$name' live?"
         Write-Host "  1) Google Drive  2) OneDrive / SharePoint  3) Dropbox  4) Box  5) Nextcloud"
         Write-Host "  6) A folder on this computer or a network drive  7) S3 (advanced)"
-        $choice = ([string](Read-Host "Pick 1-7")).Trim()
+        # Storage the user already connected in rclone is usually the right answer, so offer it.
+        $mine = @(Get-RcloneRemotes | Where-Object { -not $inUseRemotes.ContainsKey($_.Name) })
+        if ($mine.Count -gt 0) {
+            Write-Host ""
+            Write-Host "  Or storage you already set up in rclone:"
+            foreach ($r in $mine) {
+                $t = if ($r.Type) { $r.Type } else { "?" }
+                Write-Host ("    {0,-24} {1}" -f $r.Name, $t)
+            }
+            Write-Host "  Type a name from that list to use it."
+        }
+        $choice = ([string](Read-Host "Pick 1-7, or an rclone remote name")).Trim()
         $provider = switch ($choice) {
             "1"     { "drive" }
             "2"     { "onedrive" }
@@ -839,7 +899,23 @@ function Space-Add($rawName, $provider, $folder) {
         }
     }
     $provider = ([string]$provider).Trim()
-    $backend  = Get-SpaceBackend $provider
+
+    # "tekt space add team gdrive", where gdrive: is a remote the user already made.
+    # Ride that remote instead of minting a second connection to the same storage.
+    $adopt = @(Get-RcloneRemotes | Where-Object { $_.Name -eq ([string]$provider).TrimEnd(':') })
+    if ($adopt.Count -ge 1) {
+        $remote  = $adopt[0].Name
+        $adopted = $true
+        $rcType  = $adopt[0].Type
+        $mapped  = ConvertFrom-RcloneType $rcType
+        if ($mapped)      { $provider = $mapped }
+        elseif ($rcType)  { $provider = $rcType }
+        $backend = Get-SpaceBackend $provider
+        # sftp, crypt, ftp and friends still sync fine; they just need a folder like any cloud remote
+        if (-not $backend) { $backend = "generic" }
+    } else {
+        $backend = Get-SpaceBackend $provider
+    }
     if (-not $backend) {
         Err "Tekt doesn't know '$provider'. Use one of: drive, onedrive, dropbox, box, nextcloud, folder, s3"
         return
@@ -948,6 +1024,7 @@ function Space-Add($rawName, $provider, $folder) {
         [IO.File]::WriteAllText($readme, (($readmeLines -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding $false))
     }
     $meta = @("name=$name", "provider=$provider", "remote=$remote", "folder=$folder", "created=$(Get-UtcNow)", "initialized=0")
+    if ($adopted) { $meta += "adopted=1" }   # the remote was the user's; removing the Space must not delete it
     [IO.File]::WriteAllLines((Join-Path $dir ".tekt-space"), [string[]]$meta, (New-Object System.Text.UTF8Encoding $false))
 
     & rclone mkdir "${remote}:$folder" 2>$null | Out-Null
@@ -1013,6 +1090,32 @@ function Space-Sync($only) {
     }
 }
 
+function Space-Remotes {
+    Section "Storage rclone already knows about"
+    if (-not (Test-Rclone)) { return }
+    $remotes = @(Get-RcloneRemotes)
+    if ($remotes.Count -eq 0) {
+        Log "No rclone remotes yet. Add a Space and Tekt will make one:  tekt space add team drive"
+        return
+    }
+    # which remotes are already backing a Space
+    $inUse = @{}
+    foreach ($d in @(Get-SpaceDirs)) {
+        $n = Split-Path $d -Leaf
+        $inUse[(Get-SpaceRemote $d $n)] = $n
+    }
+    foreach ($r in $remotes) {
+        $type = if ($r.Type) { $r.Type } else { "?" }
+        if ($inUse.ContainsKey($r.Name)) {
+            Write-Host ("  [OK]  {0,-24} {1,-10} Space '{2}'" -f $r.Name, $type, $inUse[$r.Name]) -ForegroundColor Green
+        } else {
+            Write-Host ("  [ ?]  {0,-24} {1,-10} not a Space yet" -f $r.Name, $type)
+        }
+    }
+    Write-Host ""
+    Log "Use one for a Space:  tekt space add <name> <remote>"
+}
+
 function Space-List {
     $dirs = @(Get-SpaceDirs)
     if ($dirs.Count -eq 0) { Log "No Spaces yet. Add one:  tekt space add team drive"; return }
@@ -1039,7 +1142,12 @@ function Space-Remove($rawName) {
     $dir  = Join-Path $TektSpaces $name
     $meta = Join-Path $dir ".tekt-space"
     if (-not (Test-Path -LiteralPath $meta)) { Err "No Space named '$name'. See: tekt space list"; return }
-    if (Test-Cmd "rclone") { & rclone config delete "tekt-$name" 2>$null | Out-Null }
+    $spaceRemote = Get-SpaceRemote $dir $name
+    if ((Get-SpaceMeta $dir "adopted") -eq "1") {
+        Log "Leaving your rclone remote '$spaceRemote' alone - Tekt didn't create it."
+    } elseif (Test-Cmd "rclone") {
+        & rclone config delete $spaceRemote 2>$null | Out-Null
+    }
     Move-Item -LiteralPath $meta -Destination (Join-Path $dir ".tekt-space.removed") -Force -ErrorAction SilentlyContinue
     Link-SpaceSkills $name   # its skills leave Claude Code
     Success "Disconnected '$name'. Your files stay in $dir and in the cloud folder; nothing was deleted."
@@ -1173,8 +1281,10 @@ function Space-Open($rawName) {   # open a Space's folder in File Explorer
 
 function Space-Help {
     Write-Host "Usage: tekt space <command>"
-    Write-Host "  add <name> [provider] [folder]  Create or join a Space (drive, onedrive, dropbox, box, nextcloud, folder, s3)"
+    Write-Host "  add <name> [provider] [folder]  Create or join a Space (drive, onedrive, dropbox, box, nextcloud, folder, s3,"
+    Write-Host "                                  or the name of an rclone remote you already have)"
     Write-Host "  list                            Show your Spaces"
+    Write-Host "  remotes                         Show every rclone remote, and which are Spaces"
     Write-Host "  sync [name]                     Two-way sync now (all Spaces, or just one)"
     Write-Host "  invite <name>                   Write an invitation to a Space (copied to your clipboard)"
     Write-Host "  open <name>                     Open a Space's folder"
@@ -2240,6 +2350,7 @@ switch ($Command) {
             "add"      { Space-Add $a1 $a2 $a3 }
             "sync"     { Space-Sync $a1 }
             "list"     { Space-List }
+            "remotes"  { Space-Remotes }
             "ls"       { Space-List }
             "remove"   { Space-Remove $a1 }
             "rm"       { Space-Remove $a1 }
@@ -2265,6 +2376,7 @@ switch ($Command) {
         Write-Host "Spaces: share docs, knowledge and skills through Google Drive, OneDrive, Dropbox, Box, Nextcloud or a folder"
         Write-Host "  space add <name> [provider] [folder]  Create or join a Space"
         Write-Host "  space list                            Show your Spaces"
+        Write-Host "  space remotes                         Every rclone remote, and which are Spaces"
         Write-Host "  space sync [name]                     Two-way sync now"
         Write-Host "  space invite <name>                   Write an invitation to a Space (copied to your clipboard)"
         Write-Host "  space open <name>                     Open a Space's folder"
