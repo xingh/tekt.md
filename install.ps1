@@ -805,6 +805,23 @@ function Test-Rclone {
     return $false
 }
 
+# Is this remote actually reachable? Catches a wrong endpoint or region before a Space is built.
+function Test-SpaceRemote($remote) {
+    if (-not (Test-Cmd "rclone")) { return $true }
+    $out = (& rclone lsd "${remote}:" --max-depth 1 --retries 1 --low-level-retries 1 --timeout 15s 2>&1 | Out-String)
+    if ($LASTEXITCODE -eq 0) { return $true }
+    # A name that does not resolve, or a refused dial, is a broken connection - not a permissions problem.
+    if ($out -match "no such host|dial tcp|connection refused|certificate") {
+        Err "Tekt connected '$remote', but it can't be reached."
+        $u = [regex]::Match($out, '(?:Get|Put) "[^"]+"')
+        if ($u.Success) { Write-Host ("  " + $u.Value) }
+        Log "That usually means the endpoint or region is wrong. Check it with:  rclone config show $remote"
+        Log "Fix just the endpoint with:  rclone config update $remote endpoint=https://...   (blank for Amazon S3)"
+        return $false
+    }
+    return $true   # anything else (no list permission, empty account) is fine
+}
+
 function Space-Add($rawName, $provider, $folder) {
     Section "Add a Space"
     if (-not $rawName) { $rawName = Read-Host "Name for this Space (e.g. team, family, research)" }
@@ -885,8 +902,46 @@ function Space-Add($rawName, $provider, $folder) {
                 }
             }
             "s3" {
-                Log "rclone will now ask for your S3 endpoint and access keys."
-                & rclone config create $remote s3 --all
+                # rclone's own "--all" walks every S3 option, and the endpoint question arrives as
+                # free text right after a run of numbered menus - answering it "1" silently builds
+                # https://1/. Ask only what is needed, and check the answers.
+                Write-Host "  Which S3?  1) Amazon S3   2) Cloudflare R2   3) Backblaze B2   4) MinIO or other"
+                $s3prov = switch (([string](Read-Host "  Choose 1-4 [1]")).Trim()) {
+                    "2"     { "Cloudflare" }
+                    "3"     { "Backblaze" }
+                    "4"     { "Minio" }
+                    default { "AWS" }
+                }
+                $s3key = ([string](Read-Host "  Access key ID")).Trim()
+                $s3sec = ""
+                $sec   = Read-Host "  Secret access key" -AsSecureString
+                if ($sec) {
+                    $bstr  = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)
+                    try { $s3sec = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+                    finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+                }
+                if (-not $s3key -or -not $s3sec) { Err "S3 needs an access key and a secret."; return }
+                if ($s3prov -eq "AWS") {
+                    $s3region = ([string](Read-Host "  Region [us-east-1]")).Trim()
+                    if (-not $s3region) { $s3region = "us-east-1" }
+                    $s3endpoint = ""
+                } else {
+                    $s3region = ([string](Read-Host "  Region [auto]")).Trim()
+                    if (-not $s3region) { $s3region = "auto" }
+                    $s3endpoint = ([string](Read-Host "  Endpoint URL (e.g. https://s3.example.com)")).Trim()
+                    if (-not $s3endpoint) { Err "$s3prov needs an endpoint URL."; return }
+                }
+                # a bare word or number is never a usable endpoint; that is what produces https://1/
+                if ($s3endpoint -and $s3endpoint -notmatch '^(https?://)?[A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,}(:[0-9]+)?(/.*)?$') {
+                    Err "That endpoint doesn't look like an address: $s3endpoint"
+                    Log "Use a host or URL, e.g. https://s3.example.com - or leave it blank for Amazon S3."
+                    return
+                }
+                $rcArgs = @("config", "create", $remote, "s3",
+                            "provider=$s3prov", "env_auth=false", "access_key_id=$s3key",
+                            "secret_access_key=$s3sec", "region=$s3region", "acl=private")
+                if ($s3endpoint) { $rcArgs += "endpoint=$s3endpoint" }
+                & rclone @rcArgs | Out-Null
                 if ($LASTEXITCODE -ne 0) {
                     & rclone config delete $remote 2>$null | Out-Null
                     Err "S3 setup didn't finish. Try again: tekt space add $name $provider"
@@ -904,6 +959,11 @@ function Space-Add($rawName, $provider, $folder) {
             }
         }
         Success "Connected to $label as '$remote'"
+    }
+
+    if (-not (Test-SpaceRemote $remote)) {
+        Log "Nothing was created locally. Fix the connection, then run:  tekt space add $name $provider"
+        return
     }
 
     # Folder inside the storage (the alias already points at the folder itself)
@@ -1026,7 +1086,13 @@ function Space-List {
         if (-not $last) { $last = "never" }
         $docs   = @(Get-ChildItem -LiteralPath (Join-Path $dir "docs") -File -Recurse -Force -ErrorAction SilentlyContinue).Count
         $skills = @(Get-ChildItem -LiteralPath (Join-Path $dir "skills") -Directory -Force -ErrorAction SilentlyContinue).Count
+        # the storage this Space actually syncs with, so a wrong remote is visible here
+        $remote = Get-SpaceMeta $dir "remote"
+        if (-not $remote) { $remote = "tekt-$name" }
+        $folder = Get-SpaceMeta $dir "folder"
+        $source = if ($folder) { "${remote}:$folder" } else { "${remote}:" }
         Write-Host ("  {0,-16} {1,-20} {2}" -f $name, $label, $dir) -ForegroundColor Green
+        Write-Host ("      {0}" -f $source) -ForegroundColor DarkGray
         Write-Host ("      last sync {0} {1} {2} docs {1} {3} skills" -f $last, $MidDot, $docs, $skills)
     }
     Write-Host ""
