@@ -1710,7 +1710,7 @@ space_sync() {
 
 space_list() {
   section "Spaces"
-  local dir found=0 provider backend last docs skills
+  local dir found=0 provider backend last docs skills remote folder source
   for dir in "$TEKT_SPACES"/*/; do
     dir="${dir%/}"
     [ -f "$dir/.tekt-space" ] || continue
@@ -1720,7 +1720,12 @@ space_list() {
     last="$(space_meta "$dir" last_sync)"
     docs="$(find "$dir/docs" -type f 2>/dev/null | wc -l | tr -d ' ')"
     skills="$(find "$dir/skills" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')"
+    # the storage this Space actually syncs with, so a wrong remote is visible here
+    remote="$(space_meta "$dir" remote)"; remote="${remote:-tekt-$(basename "$dir")}"
+    folder="$(space_meta "$dir" folder)"
+    if [ -n "$folder" ]; then source="$remote:$folder"; else source="$remote:"; fi
     printf "  ${GREEN}●${RESET} %-14s %-20s %s\n" "$(basename "$dir")" "$(space_label "$backend")" "$dir"
+    printf "    %-14s %s\n" "" "$source"
     printf "    %-14s last sync %s · %s docs · %s skills\n" "" "${last:-never}" "$docs" "$skills"
   done
   if [ "$found" -eq 0 ]; then log "No Spaces yet. Add one:  tekt space add team drive"; fi

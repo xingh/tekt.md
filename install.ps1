@@ -1086,7 +1086,13 @@ function Space-List {
         if (-not $last) { $last = "never" }
         $docs   = @(Get-ChildItem -LiteralPath (Join-Path $dir "docs") -File -Recurse -Force -ErrorAction SilentlyContinue).Count
         $skills = @(Get-ChildItem -LiteralPath (Join-Path $dir "skills") -Directory -Force -ErrorAction SilentlyContinue).Count
+        # the storage this Space actually syncs with, so a wrong remote is visible here
+        $remote = Get-SpaceMeta $dir "remote"
+        if (-not $remote) { $remote = "tekt-$name" }
+        $folder = Get-SpaceMeta $dir "folder"
+        $source = if ($folder) { "${remote}:$folder" } else { "${remote}:" }
         Write-Host ("  {0,-16} {1,-20} {2}" -f $name, $label, $dir) -ForegroundColor Green
+        Write-Host ("      {0}" -f $source) -ForegroundColor DarkGray
         Write-Host ("      last sync {0} {1} {2} docs {1} {3} skills" -f $last, $MidDot, $docs, $skills)
     }
     Write-Host ""
