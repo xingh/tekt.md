@@ -1522,6 +1522,21 @@ Join it from your computer:  tekt space add $1 <drive|onedrive|dropbox|box|nextc
 EOF
 }
 
+space_probe() {      # is this remote actually reachable? catches a wrong endpoint or region early
+  local remote="$1" out=""
+  command_exists rclone || return 0
+  out="$(rclone lsd "$remote:" --max-depth 1 --retries 1 --low-level-retries 1 --timeout 15s 2>&1)" && return 0
+  # A name that does not resolve, or a refused dial, is a broken connection - not a permissions problem.
+  if printf '%s' "$out" | grep -Eq 'no such host|dial tcp|connection refused|certificate'; then
+    error "Tekt connected '$remote', but it can't be reached."
+    printf '%s\n' "$out" | grep -Eo 'Get "[^"]+"|Put "[^"]+"' | head -1
+    log "That usually means the endpoint or region is wrong. Check it with:  rclone config show $remote"
+    log "Fix just the endpoint with:  rclone config update $remote endpoint=https://...   (blank for Amazon S3)"
+    return 1
+  fi
+  return 0   # anything else (no list permission, empty account) is fine
+}
+
 space_add() {
   local name="${1:-}" provider="${2:-}" folder="${3:-}"
   section "Add a Space"
@@ -1581,8 +1596,36 @@ space_add() {
           || { error "Couldn't connect to Nextcloud. Check the address and the app password."; return 1; }
         ;;
       s3)
-        log "rclone will ask for the endpoint, access key and secret."
-        rclone config create "$remote" s3 --all </dev/tty || { error "S3 setup didn't finish."; return 1; }
+        # rclone's own "--all" walks every S3 option, and the endpoint question arrives as free
+        # text right after a run of numbered menus - answering it "1" silently builds https://1/.
+        # Ask only what is needed, and check the answers.
+        local s3prov s3key s3secret="" s3region s3endpoint
+        echo "  Which S3?  1) Amazon S3   2) Cloudflare R2   3) Backblaze B2   4) MinIO or other"
+        case "$(space_ask "Choose 1-4 [1]: ")" in
+          2) s3prov=Cloudflare ;; 3) s3prov=Backblaze ;; 4) s3prov=Minio ;; *) s3prov=AWS ;;
+        esac
+        s3key="$(space_ask "Access key ID: ")"
+        read -rsp "  Secret access key: " s3secret </dev/tty || true; echo
+        if [ -z "$s3key" ] || [ -z "$s3secret" ]; then error "S3 needs an access key and a secret."; return 1; fi
+        if [ "$s3prov" = AWS ]; then
+          s3region="$(space_ask "Region [us-east-1]: ")"; s3region="${s3region:-us-east-1}"
+          s3endpoint=""
+        else
+          s3region="$(space_ask "Region [auto]: ")"; s3region="${s3region:-auto}"
+          s3endpoint="$(space_ask "Endpoint URL (e.g. https://s3.example.com): ")"
+          if [ -z "$s3endpoint" ]; then error "$s3prov needs an endpoint URL."; return 1; fi
+        fi
+        # a bare word or number is never a usable endpoint; that is what produces https://1/
+        if [ -n "$s3endpoint" ] && ! printf '%s' "$s3endpoint" | grep -Eq '^(https?://)?[A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,}(:[0-9]+)?(/.*)?$'; then
+          error "That endpoint doesn't look like an address: $s3endpoint"
+          log   "Use a host or URL, e.g. https://s3.example.com - or leave it blank for Amazon S3."
+          return 1
+        fi
+        set -- provider="$s3prov" env_auth=false access_key_id="$s3key" \
+               secret_access_key="$s3secret" region="$s3region" acl=private
+        [ -n "$s3endpoint" ] && set -- "$@" endpoint="$s3endpoint"
+        rclone config create "$remote" s3 "$@" >/dev/null \
+          || { error "S3 setup didn't finish."; return 1; }
         ;;
       *)
         log "Your browser will open so you can sign in to $(space_label "$backend"). Tekt never sees your password."
@@ -1591,6 +1634,11 @@ space_add() {
         ;;
     esac
     success "Connected to $(space_label "$backend") as '$remote'"
+  fi
+
+  if ! space_probe "$remote"; then
+    log "Nothing was created locally. Fix the connection, then run:  tekt space add $name $provider"
+    return 1
   fi
 
   if [ -z "$folder" ] && [ "$backend" != alias ]; then
