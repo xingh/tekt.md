@@ -875,6 +875,7 @@ function Space-Add($rawName, $provider, $folder) {
         Write-Host "Where should the Space '$name' live?"
         Write-Host "  1) Google Drive  2) OneDrive / SharePoint  3) Dropbox  4) Box  5) Nextcloud"
         Write-Host "  6) A folder on this computer or a network drive  7) S3 (advanced)"
+        Write-Host "  8) An rclone remote you already have"
         # Storage the user already connected in rclone is usually the right answer, so offer it.
         $mine = @(Get-RcloneRemotes | Where-Object { -not $inUseRemotes.ContainsKey($_.Name) })
         if ($mine.Count -gt 0) {
@@ -886,7 +887,7 @@ function Space-Add($rawName, $provider, $folder) {
             }
             Write-Host "  Type a name from that list to use it."
         }
-        $choice = ([string](Read-Host "Pick 1-7, or an rclone remote name")).Trim()
+        $choice = ([string](Read-Host "Pick 1-8, or an rclone remote name")).Trim()
         $provider = switch ($choice) {
             "1"     { "drive" }
             "2"     { "onedrive" }
@@ -895,6 +896,7 @@ function Space-Add($rawName, $provider, $folder) {
             "5"     { "nextcloud" }
             "6"     { "folder" }
             "7"     { "s3" }
+            "8"     { ([string](Read-Host "  Which rclone remote?")).Trim() }
             default { $choice }
         }
     }

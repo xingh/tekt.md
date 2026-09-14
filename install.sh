@@ -1562,11 +1562,27 @@ space_add() {
     echo "  Where should it live? Pick what your people already use:"
     echo "    1) Google Drive   2) OneDrive / SharePoint   3) Dropbox   4) Box"
     echo "    5) Nextcloud      6) A folder on this computer or a network drive"
-    echo "    7) S3 (advanced)"
-    case "$(space_ask "Choose 1-7: ")" in
+    echo "    7) S3 (advanced)  8) An rclone remote you already have"
+    # storage already connected in rclone is usually the right answer, so show it
+    local _mine _rname
+    _mine="$(rclone listremotes --long 2>/dev/null)"
+    if [ -n "$_mine" ]; then
+      echo ""
+      echo "  Your rclone remotes:"
+      printf '%s\n' "$_mine" | while IFS= read -r _rname; do
+        [ -n "$_rname" ] || continue
+        printf '    %s\n' "$_rname"
+      done
+      echo "  Type a name from that list to use it."
+    fi
+    local _choice
+    _choice="$(space_ask "Choose 1-8, or an rclone remote name: ")"
+    case "$_choice" in
       1) provider=drive ;;     2) provider=onedrive ;; 3) provider=dropbox ;; 4) provider=box ;;
       5) provider=nextcloud ;; 6) provider=folder ;;   7) provider=s3 ;;
-      *) error "Pick a number from 1 to 7."; return 1 ;;
+      8) provider="$(space_ask "Which rclone remote? ")" ;;
+      "") error "Pick a number from 1 to 8, or the name of an rclone remote."; return 1 ;;
+      *) provider="$_choice" ;;
     esac
   fi
   # "tekt space add team gdrive", where gdrive: is a remote the user already made.
