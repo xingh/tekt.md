@@ -1446,6 +1446,34 @@ tekt_share() {
 # rclone bisync. Every Space has the same layout: docs/ knowledge/ skills/.
 # Metadata lives in <space>/.tekt-space (key=value); install.ps1 reads the same.
 # =============================================================================
+rclone_remote_type() {   # the rclone type of a remote, or nothing when there's no such remote
+  command_exists rclone || return 0
+  rclone listremotes --long 2>/dev/null | sed -n "s/^$1:[[:space:]]\{1,\}\(.*[^[:space:]]\)[[:space:]]*$/\1/p" | head -1
+}
+
+rclone_has_remote() {    # a remote rclone already knows about, whoever made it
+  command_exists rclone || return 1
+  rclone listremotes 2>/dev/null | grep -qx "$1:"
+}
+
+rclone_type_provider() { # rclone type → the storage word Tekt uses (the reverse of space_backend)
+  case "$1" in
+    drive)       echo drive ;;
+    onedrive)    echo onedrive ;;
+    dropbox)     echo dropbox ;;
+    box)         echo box ;;
+    webdav)      echo nextcloud ;;
+    alias|local) echo folder ;;
+    s3|b2)       echo s3 ;;
+    *) return 1 ;;
+  esac
+}
+
+space_remote() {         # the remote a Space uses, without assuming the tekt- prefix
+  local r; r="$(space_meta "$1" remote)"
+  if [ -n "$r" ]; then printf '%s' "$r"; else printf 'tekt-%s' "$2"; fi
+}
+
 space_backend() {    # friendly storage word → rclone backend
   case "$1" in
     drive|gdrive|google|googledrive|google-drive) echo drive ;;
@@ -1468,6 +1496,7 @@ space_label() {
     webdav)   echo "Nextcloud / WebDAV" ;;
     alias)    echo "a folder" ;;
     s3)       echo "S3" ;;
+    generic)  echo "your storage" ;;
     *)        echo "$1" ;;
   esac
 }
@@ -1533,17 +1562,48 @@ space_add() {
     echo "  Where should it live? Pick what your people already use:"
     echo "    1) Google Drive   2) OneDrive / SharePoint   3) Dropbox   4) Box"
     echo "    5) Nextcloud      6) A folder on this computer or a network drive"
-    echo "    7) S3 (advanced)"
-    case "$(space_ask "Choose 1-7: ")" in
+    echo "    7) S3 (advanced)  8) An rclone remote you already have"
+    # storage already connected in rclone is usually the right answer, so show it
+    local _mine _rname
+    _mine="$(rclone listremotes --long 2>/dev/null)"
+    if [ -n "$_mine" ]; then
+      echo ""
+      echo "  Your rclone remotes:"
+      printf '%s\n' "$_mine" | while IFS= read -r _rname; do
+        [ -n "$_rname" ] || continue
+        printf '    %s\n' "$_rname"
+      done
+      echo "  Type a name from that list to use it."
+    fi
+    local _choice
+    _choice="$(space_ask "Choose 1-8, or an rclone remote name: ")"
+    case "$_choice" in
       1) provider=drive ;;     2) provider=onedrive ;; 3) provider=dropbox ;; 4) provider=box ;;
       5) provider=nextcloud ;; 6) provider=folder ;;   7) provider=s3 ;;
-      *) error "Pick a number from 1 to 7."; return 1 ;;
+      8) provider="$(space_ask "Which rclone remote? ")" ;;
+      "") error "Pick a number from 1 to 8, or the name of an rclone remote."; return 1 ;;
+      *) provider="$_choice" ;;
     esac
   fi
+  # "tekt space add team gdrive", where gdrive: is a remote the user already made.
+  # Ride that remote instead of making a second connection to the same storage.
+  local adopted=0 remote="tekt-$name" rctype="" mapped=""
+  if rclone_has_remote "${provider%:}"; then
+    remote="${provider%:}"
+    adopted=1
+    rctype="$(rclone_remote_type "$remote")"
+    if mapped="$(rclone_type_provider "$rctype")"; then provider="$mapped"
+    elif [ -n "$rctype" ]; then provider="$rctype"; fi
+  fi
+
   local backend
   if ! backend="$(space_backend "$provider")"; then
-    error "Unknown storage '$provider'. Use: drive, onedrive, dropbox, box, nextcloud, folder or s3."
-    return 1
+    # sftp, crypt, ftp and friends still sync fine; they just need a folder like any cloud remote
+    if [ "$adopted" = 1 ]; then backend=generic
+    else
+      error "Unknown storage '$provider'. Use: drive, onedrive, dropbox, box, nextcloud, folder or s3 - or the name of an rclone remote you already have."
+      return 1
+    fi
   fi
 
   if ! command_exists rclone; then
@@ -1551,7 +1611,7 @@ space_add() {
     if ! command_exists rclone; then error "Spaces need rclone — install it from https://rclone.org/install/ and try again."; return 1; fi
   fi
 
-  local remote="tekt-$name" dir="$TEKT_SPACES/$name"
+  local dir="$TEKT_SPACES/$name"
   if [ -f "$dir/.tekt-space" ]; then
     warn "Space '$name' already exists at $dir — syncing it instead."
     space_sync "$name"
@@ -1614,6 +1674,8 @@ space_add() {
   space_set_meta "$dir" folder "$folder"
   space_set_meta "$dir" created "$(space_now)"
   space_set_meta "$dir" initialized 0
+  # the remote was the user's; disconnecting the Space must not delete it
+  [ "$adopted" = 1 ] && space_set_meta "$dir" adopted 1
 
   rclone mkdir "$remote:$folder" 2>/dev/null || true
   space_sync "$name" || return 1
@@ -1660,6 +1722,32 @@ space_sync() {
   return "$rc"
 }
 
+space_remotes() {
+  section "Storage rclone already knows about"
+  if ! command_exists rclone; then error "rclone isn't installed. Run the Tekt installer first."; return 1; fi
+  local any=0 line rname rtype used dir dname
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    rname="${line%%:*}"
+    rtype="$(printf '%s' "${line#*:}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+    [ -n "$rtype" ] || rtype="?"
+    any=1; used=""
+    for dir in "$TEKT_SPACES"/*/; do
+      dir="${dir%/}"
+      [ -f "$dir/.tekt-space" ] || continue
+      dname="$(space_meta "$dir" name)"; dname="${dname:-$(basename "$dir")}"
+      if [ "$(space_remote "$dir" "$dname")" = "$rname" ]; then used="$dname"; break; fi
+    done
+    if [ -n "$used" ]; then printf '  [ok]  %-24s %-10s Space "%s"\n' "$rname" "$rtype" "$used"
+    else                printf '  [ ?]  %-24s %-10s not a Space yet\n' "$rname" "$rtype"; fi
+  done <<EOF
+$(rclone listremotes --long 2>/dev/null)
+EOF
+  if [ "$any" = 0 ]; then log "No rclone remotes yet. Add a Space and Tekt will make one:  tekt space add team drive"; return; fi
+  echo ""
+  log "Use one for a Space:  tekt space add <name> <remote>"
+}
+
 space_list() {
   section "Spaces"
   local dir found=0 provider backend last docs skills
@@ -1683,8 +1771,12 @@ space_remove() {
   if [ -z "$name" ]; then error "Which Space?  tekt space remove <name>"; return 1; fi
   dir="$TEKT_SPACES/$name"
   if [ ! -f "$dir/.tekt-space" ]; then error "No Space named '$name'. See:  tekt space list"; return 1; fi
-  remote="$(space_meta "$dir" remote)"
-  rclone config delete "$remote" 2>/dev/null || true
+  remote="$(space_remote "$dir" "$name")"
+  if [ "$(space_meta "$dir" adopted)" = 1 ]; then
+    log "Leaving your rclone remote '$remote' alone - Tekt didn't create it."
+  else
+    rclone config delete "$remote" 2>/dev/null || true
+  fi
   mv "$dir/.tekt-space" "$dir/.tekt-space.removed"
   space_link_skills "$name"   # its skills leave Claude Code
   success "Disconnected '$name'. Your files stay in $dir and in the cloud folder; nothing was deleted."
@@ -2539,8 +2631,10 @@ Usage: $me [command]
 Share with your AI and your people
   space add <name> [storage] [folder]  Make a Space: a folder synced with Google Drive,
                                        OneDrive, Dropbox, Box, Nextcloud or a NAS folder
-                                       (storage: drive, onedrive, dropbox, box, nextcloud, folder, s3)
+                                       (storage: drive, onedrive, dropbox, box, nextcloud, folder, s3,
+                                       or the name of an rclone remote you already have)
   space list                           Show your Spaces
+  space remotes                        Every rclone remote, and which are Spaces
   space sync [name]                    Sync now (every Space, or one)
   space invite <name>                  Write an invitation to a Space (copied to your clipboard)
   space open <name>                    Open a Space's folder
@@ -2966,6 +3060,7 @@ case "${1:-}" in
     case "${1:-list}" in
       add)       shift; space_add "$@" ;;
       list|ls)   space_list ;;
+      remotes)   space_remotes ;;
       sync)      space_sync "${2:-}" ;;
       remove|rm) space_remove "${2:-}" ;;
       invite)    space_invite "${2:-}" ;;
