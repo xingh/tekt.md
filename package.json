@@ -5,6 +5,7 @@
   "scripts": {
     "profile": "node scripts/sync-profile.js",
     "profile:check": "node scripts/sync-profile.js --check",
+    "catalog:check": "node scripts/check-catalog.js",
     "prebuild": "npm run profile",
     "build": "eleventy",
     "start": "npm run profile && eleventy --serve"
