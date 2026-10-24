@@ -194,6 +194,25 @@ $WingetOkCodes = @(0, -1978335135, -1978335189)   # 0x8A150061 already installed
 
 function Format-ExitCode($code) { "0x" + ('{0:X8}' -f [int]$code) }
 
+# $LASTEXITCODE holds winget's HRESULTs as signed 32-bit ints (0x8A15010C -> -1978334964).
+$WingetCancelCodes = @(1602, -1978334964, -1978335226)   # MSI user exit, 0x8A15010C install cancelled, 0x8A150006 operation cancelled
+$WingetCodeReasons = @{
+    1602        = "the installation was cancelled at the administrator (UAC) prompt"
+    -1978334964 = "the installation was cancelled at the administrator (UAC) prompt"   # 0x8A15010C
+    -1978335226 = "the operation was cancelled by the user"                            # 0x8A150006
+    -1978335212 = "no package was found matching that id in the winget source"        # 0x8A150014
+    -1978335217 = "winget's package sources are broken or out of date"                # 0x8A15000F
+    1603        = "a fatal error occurred during installation"
+    1618        = "another installation is already in progress"
+}
+
+# Human-readable reason for a winget/MSI exit code, or "" when the code isn't known.
+function Explain-WingetCode($code) {
+    $reason = $WingetCodeReasons[[int]$code]
+    if ($reason) { return $reason }
+    return ""
+}
+
 function Add-InstallResult($label, $ok, [switch]$Pending) {
     $TektResults.Add([pscustomobject]@{ Label = [string]$label; Ok = [bool]$ok; Pending = [bool]$Pending })
 }
@@ -241,7 +260,14 @@ function Install-Winget($label, $id, $cmd) {
     $code = $LASTEXITCODE
     Refresh-SessionPath
     if ($WingetOkCodes -notcontains $code) {
-        Warn "$label didn't install (winget exit code $(Format-ExitCode $code)). Try: winget install --id $id -e"
+        $reason = Explain-WingetCode $code
+        if (-not $reason) {
+            Warn "$label didn't install (winget exit code $(Format-ExitCode $code)). Try: winget install --id $id -e"
+        } elseif ($WingetCancelCodes -contains $code) {
+            Warn "$label didn't install - $reason (winget exit code $(Format-ExitCode $code)). Re-run the installer and approve the prompt, or run PowerShell as Administrator first."
+        } else {
+            Warn "$label didn't install - $reason (winget exit code $(Format-ExitCode $code)). Try: winget install --id $id -e"
+        }
         Add-InstallResult $label $false
         return
     }
