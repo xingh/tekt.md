@@ -14,7 +14,7 @@ Site and catalog refresh for the raise narrative (#103–#107).
 
 - **Edge ↔ cloud sync is the headline.** Hero, Why-it's-different (State → Sync), cover/alt text, `02-database` and Spaces now lead with continuous sync and offline→resync (#103).
 - **Shared ecosystem sentence** on hero + footer: Tekt / Konotree / Intelcraft / Anant Corporation Labs; footer links anant.co (#104).
-- **"Free to use" vs "open source".** Hero/catalog eyebrow and positioning no longer call the whole stack OSI open source; Sovrant (BSL 1.1) and n8n (Sustainable Use) stay precise in the license table (#105).
+- **Open source and free to use.** Hero/catalog name both; OSI open-source entries stay “open source,” while Sovrant (BSL 1.1) and n8n (Sustainable Use) stay precise as source-available / fair-code in the license table (#105).
 - **Reframe:** Tekt's IP is curation + arkitype + sync + Sovrant; upstream credits stay load-bearing (#106).
 - **Catalog `2026.10` pins:** Go 1.27.3, Python 3.15, Node 26 (Lithium LTS), nvm 0.40.8. Multi-OS installer re-verification continues under #107.
 
