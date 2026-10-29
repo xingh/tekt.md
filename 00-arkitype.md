@@ -133,7 +133,7 @@ profile:
     positioning: Edge ↔ cloud, always in sync — for builders, operators and managers
     promise: One script installs it on machines you own, with keys you hold. Everything stays backed up.
     ecosystem: >-
-      Tekt is the free open stack. Konotree sells the box and support. Intelcraft teaches it. Anant Corporation Labs researches it.
+      Tekt is the free open stack. Konotree is commercial support. Researched by Intelcraft and developed here at Anant Corporation Labs.
     why:
       not: Tekt isn't an agent, a model or a platform.
       does: >-
@@ -315,4 +315,4 @@ profile:
 
 Tekt's IP is curation, arkitype composition, continuous edge↔cloud sync, and the Sovrant command center — while every catalog entry remains someone else's excellent work. Upstream credit is a founding principle of this distribution — see the `upstream:` field on every entry in [`tekt.catalog.yaml`](https://github.com/xingh/tekt.md/blob/main/tekt.catalog.yaml).
 
-Tekt is the free open stack. Konotree sells the box and support. Intelcraft teaches it. Anant Corporation Labs researches it.
+Tekt is the free open stack. Konotree is commercial support. Researched by Intelcraft and developed here at Anant Corporation Labs.

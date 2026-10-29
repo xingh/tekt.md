@@ -4,7 +4,7 @@
   "tagline": "The utility belt for your AI harness.",
   "positioning": "Edge ↔ cloud, always in sync — for builders, operators and managers",
   "promise": "One script installs it on machines you own, with keys you hold. Everything stays backed up.",
-  "ecosystem": "Tekt is the free open stack. Konotree sells the box and support. Intelcraft teaches it. Anant Corporation Labs researches it.",
+  "ecosystem": "Tekt is the free open stack. Konotree is commercial support. Researched by Intelcraft and developed here at Anant Corporation Labs.",
   "why": {
     "not": "Tekt isn't an agent, a model or a platform.",
     "does": "It's the utility belt around them. Edge and cloud stay synchronized — work offline, everything resyncs and stays backed up when you're back. Tekt manages the metadata, structure, processes and sync of your harness, gets you started, and keeps your agents aligned through shared communications and knowledge tools. Every tool is pre-vetted and runs on your own infrastructure.",
