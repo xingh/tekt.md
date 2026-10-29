@@ -2597,7 +2597,7 @@ function Main {
     Install-Winget "Git"            "Git.Git"                    "git"
     Install-Winget "GitHub CLI"     "GitHub.cli"                 "gh"
     Install-Winget "Go"             "GoLang.Go"                  "go"
-    Install-Winget "Python 3.12"    "Python.Python.3.12"         "python"
+    Install-Winget "Python 3.15"    "Python.Python.3.15"         "python"
     Install-Winget "Node.js LTS"    "OpenJS.NodeJS.LTS"          "node"
     Install-Winget "VS Code"        "Microsoft.VisualStudioCode" "code"
     Install-Winget "Docker Desktop" "Docker.DockerDesktop"       "docker"

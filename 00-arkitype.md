@@ -130,19 +130,22 @@ profile:
     name: tekt
     domain: tekt.md
     tagline: The utility belt for your AI harness.
-    positioning: Easy AI at the edge for builders, operators and managers
-    promise: One script installs it on machines you own, with keys you hold.
+    positioning: Edge ↔ cloud, always in sync — for builders, operators and managers
+    promise: One script installs it on machines you own, with keys you hold. Everything stays backed up.
+    ecosystem: >-
+      Tekt is the free open stack. Konotree sells the box and support. Intelcraft teaches it. Anant Corporation Labs researches it.
     why:
       not: Tekt isn't an agent, a model or a platform.
       does: >-
-        It's the utility belt around them. Tekt manages the metadata, structure, processes and state of your harness,
-        gets you started, and keeps your agents in sync through shared communications and knowledge tools. Every tool is
+        It's the utility belt around them. Edge and cloud stay synchronized — work offline, everything resyncs and stays
+        backed up when you're back. Tekt manages the metadata, structure, processes and sync of your harness, gets you
+        started, and keeps your agents aligned through shared communications and knowledge tools. Every tool is
         pre-vetted and runs on your own infrastructure.
       items:
         - {k: Metadata, v: 'What''s installed, where, which version, and who made it', where: tekt.catalog.yaml}
         - {k: Structure, v: 'How machines, agents and tools fit together', where: arkitype layers 00 – 04}
         - {k: Processes, v: How agents hand work to each other and to people, where: MCPHub · n8n · LibreChat}
-        - {k: State, v: One workspace and memory every agent can read and write, where: 'Spaces on Drive, OneDrive or Dropbox · memory MCP'}
+        - {k: Sync, v: 'Edge ↔ cloud continuously — Spaces, backups, and memory every agent can read and write', where: 'rclone · Spaces on Drive, OneDrive or Dropbox · memory MCP'}
     shelves:
       - kind: tool
         title: Tools
@@ -189,7 +192,7 @@ profile:
       - Security
       - Privacy
     repo: https://github.com/xingh/tekt.md
-    catalog_version: '2026.07'
+    catalog_version: '2026.10'
     install:
       unix: curl -fsSL https://tekt.md/install.sh | bash
       windows: irm https://tekt.md/install.ps1 | iex
@@ -244,7 +247,7 @@ profile:
         url: /02-database/
         color: '#0E8A8C'
         color_dark: '#3FC6C7'
-        blurb: 'Where data lives: workspace sync, S3, and optional databases.'
+        blurb: 'Where data lives and stays in sync: edge↔cloud workspace sync, S3, and optional databases.'
         tools: [rclone, aws-cli, s5cmd, minio, postgres]
       - code: '03'
         slug: software
@@ -310,4 +313,6 @@ profile:
 
 ---
 
-*Upstream credit is a founding principle of this distribution — see the `upstream:` field on every entry in [`tekt.catalog.yaml`](https://github.com/xingh/tekt.md/blob/main/tekt.catalog.yaml).*
+Tekt's IP is curation, arkitype composition, continuous edge↔cloud sync, and the Sovrant command center — while every catalog entry remains someone else's excellent work. Upstream credit is a founding principle of this distribution — see the `upstream:` field on every entry in [`tekt.catalog.yaml`](https://github.com/xingh/tekt.md/blob/main/tekt.catalog.yaml).
+
+Tekt is the free open stack. Konotree sells the box and support. Intelcraft teaches it. Anant Corporation Labs researches it.

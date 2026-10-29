@@ -84,7 +84,7 @@ Runtime for Tekt-native tools (PicoClaw builds, s5cmd, nanobot-ai/nanobot if you
 # macOS
 brew install go
 # Linux (amd64 — swap arm64 as needed; pin from tekt.catalog.yaml)
-curl -fsSL https://go.dev/dl/go1.26.2.linux-amd64.tar.gz -o go.tar.gz
+curl -fsSL https://go.dev/dl/go1.27.3.linux-amd64.tar.gz -o go.tar.gz
 sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go.tar.gz && rm go.tar.gz
 echo 'export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin' >> ~/.bashrc
 # Windows
@@ -97,19 +97,19 @@ Docs: [go.dev/doc/install](https://go.dev/doc/install)
 
 ```bash
 curl -fsSL https://pyenv.run | bash        # or: brew install pyenv
-pyenv install 3.14 && pyenv global 3.14
+pyenv install 3.15 && pyenv global 3.15
 ```
 
-Shell config and Linux build dependencies: see the [pyenv README](https://github.com/pyenv/pyenv). On Windows, install Python directly: `winget install --id Python.Python.3.12 -e` (Hermes needs 3.11+; nanobot needs 3.11+).
+Shell config and Linux build dependencies: see the [pyenv README](https://github.com/pyenv/pyenv). On Windows, install Python directly: `winget install --id Python.Python.3.15 -e` (Hermes needs 3.11+; nanobot needs 3.11+).
 
 ## 5. nvm / Node.js
 
 ```bash
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
-nvm install --lts && nvm alias default lts/*    # Node 24 (Krypton)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh | bash
+nvm install --lts && nvm alias default lts/*    # Node 26 (Lithium)
 ```
 
-Windows: `winget install --id OpenJS.NodeJS.LTS -e`. Node 24 is required by OpenClaw and used by the npm-installed MCP servers.
+Windows: `winget install --id OpenJS.NodeJS.LTS -e`. Node 26 LTS is required by OpenClaw and used by the npm-installed MCP servers.
 
 Docs: [github.com/nvm-sh/nvm](https://github.com/nvm-sh/nvm)
 

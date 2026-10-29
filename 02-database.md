@@ -6,7 +6,7 @@ permalink: /02-database/index.html
 
 # 02 — Database & Data Layer
 
-The `tekt.base` layer: how bytes move and persist. Object-storage sync keeps every node's workspace consistent; the databases here back the `tekt.cloud` services (LibreChat, n8n, MCPHub) when you bring those up.
+The `tekt.base` layer: how bytes move and persist. Object-storage sync keeps every node's workspace consistent — **work offline on the edge; when you're back online, Tekt resyncs and everything stays backed up**. The databases here back the `tekt.cloud` services (LibreChat, n8n, MCPHub) when you bring those up.
 
 ---
 

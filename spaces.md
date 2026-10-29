@@ -10,7 +10,7 @@ permalink: /spaces/index.html
 
 ## What a Space is
 
-A **Space** is a folder on your computer that stays in sync with storage you and your people already use: Google Drive, OneDrive, Dropbox, Box, Nextcloud, or a shared folder on a NAS. Nobody needs to learn git or set up S3.
+A **Space** is a folder on your computer that stays in sync with storage you and your people already use: Google Drive, OneDrive, Dropbox, Box, Nextcloud, or a shared folder on a NAS. Nobody needs to learn git or set up S3. **Work offline** on the plane or in a basement lab; when the network returns, the Space **resyncs** — documents, knowledge and skills catch up on every machine that joined.
 
 Every Space is laid out the same way, so people and AI tools always know where to look:
 

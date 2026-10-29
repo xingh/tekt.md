@@ -38,10 +38,10 @@ error()   { echo -e "${RED}[✗]${RESET} $*" >&2; }
 section() { echo -e "\n${BOLD}${BLUE}══ $* ══${RESET}"; }
 
 # ── Version targets (edit here to pin versions) ───────────────────────────────
-GO_VERSION="1.26.2"
-PYTHON_VERSION="3.14"
-NODE_VERSION="24"          # Active LTS (Krypton)
-NVM_VERSION="0.40.4"
+GO_VERSION="1.27.3"
+PYTHON_VERSION="3.15"
+NODE_VERSION="26"          # Active LTS (Lithium)
+NVM_VERSION="0.40.8"
 DOTNET_CHANNEL="10.0"      # .NET SDK channel (Sovrant is .NET 10 / C# 14)
 
 # ── Repo / binary sources for Tekt-native tools ───────────────────────────────
