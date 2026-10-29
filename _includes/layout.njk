@@ -737,7 +737,16 @@
     .titleblock .k { font-family: var(--f-mono); font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
     .titleblock .v { font-family: var(--f-mono); color: var(--ink); overflow-wrap: anywhere; }
     .titleblock .v a { color: inherit; }
-    .titleblock .credit { grid-column: 1 / -1; border-right: 0; border-bottom: 0; color: var(--muted); font-size: 0.8rem; }
+    .titleblock .credit {
+      grid-column: 1 / -1;
+      border-right: 0;
+      border-bottom: 0;
+      display: block; /* override cell grid so the credit sentence stays inline */
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.55;
+    }
+    .titleblock .credit a { color: var(--link); text-decoration: underline; text-underline-offset: 0.12em; }
 
     /* On-page contents, pinned beside the sheet */
     .toc { position: sticky; top: 4.5rem; font-size: 0.84rem; }
@@ -926,7 +935,7 @@
         <div><span class="k">Layer</span><span class="v">{{ cur.tekt if cur else "all" }}</span></div>
         <div><span class="k">Catalog</span><span class="v">{{ site.catalog_version }}</span></div>
         <div><span class="k">Source</span><span class="v"><a href="{{ site.repo }}/blob/main/{{ page.inputPath | replace('./', '') }}">{{ page.inputPath | replace('./', '') }}</a></span></div>
-        <div class="credit">Every tool credits its upstream creators; see <a href="/tekt.catalog.yaml">tekt.catalog.yaml</a>. Built with Eleventy · researched by <a href="https://anant.co">Anant Corporation Labs</a>. <a href="https://konotree.com">Konotree</a> · <a href="https://intelcraft.ai">Intelcraft</a> · <a href="https://tekt.md">tekt.md</a>.</div>
+        <div class="credit">Every tool credits its upstream creators; see <a href="/tekt.catalog.yaml">tekt.catalog.yaml</a>. Built with Eleventy · researched by <a href="https://anant.co">Anant Corporation Labs</a> · <a href="https://konotree.com">Konotree</a> · <a href="https://intelcraft.ai">Intelcraft</a> · <a href="https://tekt.md">tekt.md</a>.</div>
       </footer>
     </article>
 
