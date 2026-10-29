@@ -6,13 +6,15 @@ permalink: /index.html
 
 # Tekt — The Utility Belt for Your AI Harness
 
-![Tekt at the edge: one workspace, many machines, any agent](./tekt.cover.png)
+![Tekt at the edge: one workspace, many machines, any agent — synced to the cloud](./tekt.cover.png)
 
-**Easy AI at the edge.** Tekt sets up an **AI sandbox** on your Linux or Windows machine so agents can do real work for you. It is an open-source utility belt for AI engineers: a hand-curated catalog of **tools**, **agents**, **MCP servers** and **skills**. It brings the best of open source and SaaS, already picked and vetted, so you don't have to choose. One script installs it on infrastructure you own, and you **bring your own intelligence**. Builders get a workbench ready to go. Operators get a stack they can run and share. Managers get a clear view of what the agents are doing. *Sovereignty · Security · Privacy.*
+**Edge ↔ cloud, always in sync.** Everything backed up. Work offline; it resyncs when you're back. Tekt sets up an **AI sandbox** on your Linux or Windows machine so agents can do real work for you. It is a free-to-use utility belt for AI engineers: a hand-curated catalog of **tools**, **agents**, **MCP servers** and **skills**. It brings the best of free-to-use and SaaS software, already picked and vetted, so you don't have to choose. One script installs it on infrastructure you own, and you **bring your own intelligence**. Builders get a workbench ready to go. Operators get a stack they can run and share. Managers get a clear view of what the agents are doing. *Sovereignty · Security · Privacy.*
+
+Tekt is the free open stack. Konotree sells the box and support. Intelcraft teaches it. Anant Corporation Labs researches it.
 
 Browse every shelf at [tekt.md/catalog](/catalog/), or read the source of truth: [`tekt.catalog.yaml`](https://github.com/xingh/tekt.md/blob/main/tekt.catalog.yaml).
 
-![One workspace, many clients: people and clients share the same Tekt harness, tools, configuration and context](./tekt.md.png)
+![One workspace, many clients: people and agents share the same Tekt harness — synced to the cloud](./tekt.md.png)
 
 ```mermaid
 flowchart LR
@@ -24,7 +26,7 @@ flowchart LR
 ```
 
 
-Tekt is a catalog, not a product: every entry is someone else's excellent work, credited explicitly. What Tekt adds is the curation (what earns a place on a shelf), the composition (the [arkitype](/00-arkitype/)), and a bootstrap that takes you from a blank machine to a working edge/cloud stack in one sitting.
+Tekt's IP is the curation (what earns a place on a shelf), the composition (the [arkitype](/00-arkitype/)), continuous **edge ↔ cloud sync**, and the command center ([Sovrant](https://github.com/ramseur/sovrant)). Every catalog entry is still someone else's excellent work, credited explicitly — upstream credits stay load-bearing. The bootstrap takes you from a blank machine to a working, synchronized edge/cloud stack in one sitting.
 
 ## Who it's for
 
@@ -36,14 +38,14 @@ Tekt is a catalog, not a product: every entry is someone else's excellent work, 
 
 ## Why it's different
 
-Tekt isn't an agent, a model, or a platform, and it doesn't want your prompts or your data. It's the utility belt around them. It helps you manage the four things every AI harness has, gets you started, and keeps different agents in sync through shared communications and knowledge tools. Every tool is pre-vetted and runs on your own infrastructure.
+Tekt isn't an agent, a model, or a platform, and it doesn't want your prompts or your data. It's the utility belt around them. Edge and cloud stay synchronized — work offline, everything resyncs and stays backed up. It helps you manage the four things every AI harness has, gets you started, and keeps different agents aligned through shared communications and knowledge tools. Every tool is pre-vetted and runs on your own infrastructure.
 
 | Your harness needs | What that means | Where it lives in Tekt |
 | --- | --- | --- |
 | **Metadata** | What's installed, where, which version, and who made it | `tekt.catalog.yaml`, `bash install.sh status` |
 | **Structure** | How machines, agents and tools fit together | The [arkitype](/00-arkitype/) layers 00 – 04 |
 | **Processes** | How agents hand work to each other and to people | MCPHub, n8n, LibreChat |
-| **State** | One workspace and memory every agent can read and write | rclone → S3 workspace sync, Tailscale mesh, memory MCP |
+| **Sync** | Edge ↔ cloud continuously — Spaces, backups, and memory every agent can read and write | rclone → S3 / Drive / OneDrive / Dropbox, Tailscale mesh, memory MCP |
 
 ## Bring your own intelligence
 
@@ -158,9 +160,9 @@ Five documents take you from composition to a shared, working home-lab stack:
 | Git | latest | Version control — required first (Homebrew depends on it) | git-scm.com |
 | GitHub CLI | latest | Issues, pull requests and releases from the terminal (`gh auth login`) | GitHub |
 | Homebrew | 5.x | Package manager for macOS/Linux | Homebrew maintainers |
-| Go | 1.26.2 | Runtime for Tekt-native tools | The Go Authors |
-| Python | 3.14 via pyenv | Scripting, ML tooling, Python agents | PSF / pyenv contributors |
-| nvm / Node.js | Node 24 LTS | JS runtime; OpenClaw & npm MCP servers | OpenJS / nvm contributors |
+| Go | 1.27.3 | Runtime for Tekt-native tools | The Go Authors |
+| Python | 3.15 via pyenv | Scripting, ML tooling, Python agents | PSF / pyenv contributors |
+| nvm / Node.js | Node 26 LTS (Lithium) | JS runtime; OpenClaw & npm MCP servers | OpenJS / nvm contributors |
 | VS Code | latest | Primary editor | Microsoft |
 | Docker + Compose | latest | Runs the entire tekt.cloud layer | Docker, Inc. |
 
@@ -259,8 +261,10 @@ Issues and PRs welcome at [github.com/xingh/tekt.md](https://github.com/xingh/te
 
 ## Credits
 
-Tekt exists because of the people who build the tools it composes. Every entry in `tekt.catalog.yaml` carries an `upstream:` field naming its creators — that field is load-bearing. Particular thanks to the maintainers of Git, Homebrew, Go, Python/pyenv, nvm/Node, VS Code, Docker, rclone, the AWS/S3 tool authors, Tailscale, ngrok, Ollama, Anthropic (Claude Code & the MCP reference servers), the OpenClaw community, Sipeed (PicoClaw), Nous Research (Hermes), zeroclaw-labs, HKUDS (Nanobot), qwibitai (NanoClaw), samanhappy (MCPHub), Danny Avila (LibreChat), and n8n GmbH.
+Tekt exists because of the people who build the tools it composes. The catalog, the arkitype, edge↔cloud sync and Sovrant are what Tekt adds; every entry in `tekt.catalog.yaml` still carries an `upstream:` field naming its creators — that field is load-bearing. Particular thanks to the maintainers of Git, Homebrew, Go, Python/pyenv, nvm/Node, VS Code, Docker, rclone, the AWS/S3 tool authors, Tailscale, ngrok, Ollama, Anthropic (Claude Code & the MCP reference servers), the OpenClaw community, Sipeed (PicoClaw), Nous Research (Hermes), zeroclaw-labs, HKUDS (Nanobot), qwibitai (NanoClaw), samanhappy (MCPHub), Danny Avila (LibreChat), and n8n GmbH.
 
 ---
 
-*Maintained by [Anant Corporation](https://anant.us)*
+*Researched by [Anant Corporation Labs](https://anant.co) · [Konotree](https://konotree.com) · [Intelcraft](https://intelcraft.ai)*
+
+Tekt is the free open stack. Konotree sells the box and support. Intelcraft teaches it. Anant Corporation Labs researches it.

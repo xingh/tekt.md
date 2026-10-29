@@ -14,18 +14,21 @@
 # the work belongs to the people and teams listed under `upstream`.
 # =============================================================================
 
-catalog_version: "2026.07"
+catalog_version: "2026.10"
 distribution: tekt.md
-positioning: "The open-source utility belt for your AI harness: pre-vetted tools, agents, MCP servers and skills that set up an AI sandbox on Linux or Windows. Bring your own intelligence."
+positioning: "The free-to-use utility belt for your AI harness: pre-vetted tools, agents, MCP servers and skills that set up an AI sandbox on Linux or Windows, with continuous edge↔cloud sync. Bring your own intelligence."
 pillars: [Sovereignty, Security, Privacy]
 audiences: [builders, operators, managers]
 
 # ── Version pins (read by install.sh / install.ps1) ──────────────────────────
+# Refreshed 2026-10-29 from upstream stables (Go 1.27.3, Python 3.15, Node 26
+# Active LTS "Lithium", nvm 0.40.8). RcloneView pins unchanged pending a verified
+# AppImage/setup bump. Full multi-OS installer re-run is tracked in #107.
 pins:
-  GO_VERSION: "1.26.2"
-  PYTHON_VERSION: "3.14"
-  NODE_VERSION: "24"          # Active LTS (Krypton)
-  NVM_VERSION: "0.40.4"
+  GO_VERSION: "1.27.3"
+  PYTHON_VERSION: "3.15"
+  NODE_VERSION: "26"          # Active LTS (Lithium)
+  NVM_VERSION: "0.40.8"
   DOTNET_CHANNEL: "10.0"      # .NET SDK channel — Sovrant builds on .NET 10 / C# 14
   MCPHUB_IMAGE: "samanhappy/mcphub:latest"
   N8N_IMAGE: "docker.n8n.io/n8nio/n8n:latest"
@@ -139,7 +142,7 @@ layers:
         cmd: python3
         version_pin: PYTHON_VERSION
         install_steps: "curl -fsSL https://pyenv.run | bash, then pyenv install $PYTHON_VERSION"
-        install_windows: "winget:Python.Python.3.12"
+        install_windows: "winget:Python.Python.3.15"
         platforms: [macos, linux, windows]
         managed: script
         installer: install_python

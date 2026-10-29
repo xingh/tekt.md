@@ -257,6 +257,15 @@
     .hero .eyebrow { color: var(--lc); }
     .hero .lead { max-width: 40rem; font-size: 1.15rem; color: var(--muted); text-wrap: pretty; }
     .hero .lead strong { color: var(--ink); font-weight: 600; }
+    .hero .ecosystem {
+      max-width: 40rem;
+      margin-top: 1rem;
+      font-family: var(--f-mono);
+      font-size: 0.85rem;
+      line-height: 1.55;
+      color: var(--muted);
+      text-wrap: pretty;
+    }
 
     .home .hero { padding-top: 3.5rem; grid-template-columns: minmax(0, 1fr) minmax(0, 30rem); column-gap: 3rem; align-items: end; }
     .home .hero h1 { font-size: clamp(4rem, 11vw, 7.5rem); }
@@ -795,11 +804,12 @@
   {% if isHome %}
   <section class="hero" aria-labelledby="hero-title">
     <div class="intro">
-      <span class="eyebrow">open source · catalog {{ site.catalog_version }} · {{ site.pillars | join(" · ") }}</span>
+      <span class="eyebrow">free to use · catalog {{ site.catalog_version }} · {{ site.pillars | join(" · ") }}</span>
       <h1 id="hero-title">Tekt</h1>
       <p class="slogan">{{ site.tagline }}</p>
       <span class="rule" aria-hidden="true"></span>
-      <p class="lead">Tekt <strong>connects your computer to your AI</strong> and lets you <strong>share documents, knowledge and skills</strong> with colleagues and friends through the Google Drive, OneDrive or Dropbox you already use. It sets up an AI sandbox on Linux or Windows from pre-vetted open-source and SaaS tools, and you <strong>bring your own intelligence</strong>.</p>
+      <p class="lead">Tekt keeps the <strong>edge and the cloud in sync</strong> — always backed up. Work offline; it resyncs when you're back. It <strong>connects your computer to your AI</strong> and lets you <strong>share documents, knowledge and skills</strong> through the Google Drive, OneDrive or Dropbox you already use. One script sets up an AI sandbox on Linux or Windows from a curated mix of free-to-use and SaaS tools, and you <strong>bring your own intelligence</strong>.</p>
+      {% if site.ecosystem %}<p class="ecosystem">{{ site.ecosystem }}</p>{% endif %}
     </div>
     <div class="install" aria-label="Install">
       <div class="row">
@@ -916,7 +926,7 @@
         <div><span class="k">Layer</span><span class="v">{{ cur.tekt if cur else "all" }}</span></div>
         <div><span class="k">Catalog</span><span class="v">{{ site.catalog_version }}</span></div>
         <div><span class="k">Source</span><span class="v"><a href="{{ site.repo }}/blob/main/{{ page.inputPath | replace('./', '') }}">{{ page.inputPath | replace('./', '') }}</a></span></div>
-        <div class="credit">Every tool credits its upstream creators; see <a href="/tekt.catalog.yaml">tekt.catalog.yaml</a>. Built with Eleventy · maintained by <a href="https://anant.us">Anant Corporation</a>.</div>
+        <div class="credit">Every tool credits its upstream creators; see <a href="/tekt.catalog.yaml">tekt.catalog.yaml</a>. Built with Eleventy · researched by <a href="https://anant.co">Anant Corporation Labs</a>. <a href="https://konotree.com">Konotree</a> · <a href="https://intelcraft.ai">Intelcraft</a> · <a href="https://tekt.md">tekt.md</a>.</div>
       </footer>
     </article>
 
